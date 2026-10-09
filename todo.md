@@ -4,12 +4,12 @@
 
 Objetivo: convertir el MVP en un player usable día a día.
 
-- [ ] Reemplazar backend de reproducción básico (`afplay/ffplay`) por un motor con mejor control de estado, progreso y seek.
-- [ ] Implementar barra de progreso real de reproducción con tiempo actual / tiempo total.
-- [ ] Implementar **seek** real (arrastrar barra para adelantar/retroceder pista).
-- [ ] Sincronizar de forma confiable eventos de reproducción (play/pause/stop/track end) para actualizar UI en tiempo real.
-- [ ] Añadir indicador visual claro de canción en reproducción y estado de pausa.
-- [ ] Añadir tests unitarios para módulo de reproducción (estado, cola, navegación).
+- [x] Reemplazar backend de reproducción básico (`afplay/ffplay`) por un motor con mejor control de estado, progreso y seek.
+- [x] Implementar barra de progreso real de reproducción con tiempo actual / tiempo total.
+- [x] Implementar **seek** real (arrastrar barra para adelantar/retroceder pista).
+- [x] Sincronizar de forma confiable eventos de reproducción (play/pause/stop/track end) para actualizar UI en tiempo real.
+- [x] Añadir indicador visual claro de canción en reproducción y estado de pausa.
+- [x] Añadir tests unitarios para módulo de reproducción (estado, cola, navegación).
 
 ## Fase v0.3 - Librería navegable + playlists útiles
 

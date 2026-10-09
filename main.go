@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -27,10 +28,12 @@ const (
 )
 
 type app struct {
-	store   *library.Store
-	player  *player.Player
-	lastfm  *lastfm.Client
-	section section
+	store    *library.Store
+	player   *player.Player
+	lastfm   *lastfm.Client
+	window   *mygo.Window
+	section  section
+	sliderAt float64
 
 	rootInput  string
 	status     string
@@ -70,13 +73,16 @@ func defaultMusicDir() string {
 
 func (a *app) view(c *ui.Context) {
 	t := c.Theme()
+	a.consumePlayerEvents()
 	ui.Column(c).Fill().Padding(14).Gap(12).Children(func() {
 		ui.Text(c, "Musaik").FontSize(28).Bold()
 		ui.Text(c, a.status).TextColor(t.TextMuted)
+		a.viewControls(c)
 		a.viewSourceBar(c)
 		a.viewSections(c)
-		a.viewMain(c)
-		a.viewControls(c)
+		ui.Scroll(c).Grow(1).Children(func() {
+			a.viewMain(c)
+		})
 	})
 }
 
@@ -176,7 +182,7 @@ func (a *app) viewSongs(c *ui.Context, songs []model.Song) {
 	ui.Column(c).Gap(4).Children(func() {
 		for i := 0; i < limit; i++ {
 			song := songs[i]
-			a.viewSongRow(c, i, song)
+			a.viewSongRow(c, song)
 		}
 		if len(songs) > limit {
 			ui.Textf(c, "... y %d más", len(songs)-limit)
@@ -184,7 +190,7 @@ func (a *app) viewSongs(c *ui.Context, songs []model.Song) {
 	})
 }
 
-func (a *app) viewSongRow(c *ui.Context, idx int, song model.Song) {
+func (a *app) viewSongRow(c *ui.Context, song model.Song) {
 	isSelected := song.ID == a.selectedID
 	prefix := "  "
 	if isSelected {
@@ -194,55 +200,181 @@ func (a *app) viewSongRow(c *ui.Context, idx int, song model.Song) {
 
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 		if ui.Button(c, "Play").Width(50).Clicked() {
-			a.playSongAt(idx, song)
+			a.playSongByID(song.ID)
 		}
 		if ui.Button(c, "♥").Width(38).Clicked() {
 			a.store.ToggleFavorite(song.ID)
 		}
 		if ui.Button(c, title).Clicked() {
 			a.selectedID = song.ID
-			a.playIndex = idx
+			if idx, _, ok := a.findSong(song.ID); ok {
+				a.playIndex = idx
+			}
 		}
 	})
 }
 
 func (a *app) viewControls(c *ui.Context) {
-	isPaused := a.player.IsPaused()
+	state := a.player.State()
+	isPaused := state.Paused
 	playLabel := "Play/Pause"
 	if isPaused {
 		playLabel = "Resume"
 	}
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		if ui.Button(c, "Previous").Clicked() {
-			a.playPrevious()
+
+	duration := state.Duration
+	position := state.Position
+	if duration > 0 {
+		if a.sliderAt <= 0 || a.sliderAt > duration.Seconds() {
+			a.sliderAt = position.Seconds()
 		}
-		if ui.PrimaryButton(c, playLabel).Clicked() {
-			if err := a.player.TogglePause(); err != nil {
-				a.status = "No se puede pausar/reanudar: " + err.Error()
-			} else if isPaused {
-				a.status = "Reproducción reanudada"
+	}
+
+	ui.Column(c).Gap(8).Children(func() {
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, formatDuration(position))
+			if duration > 0 {
+				if ui.Slider(c.Key("progress"), &a.sliderAt, 0, duration.Seconds()).Step(1).Width(500).Changed() {
+					if err := a.player.SeekTo(time.Duration(a.sliderAt * float64(time.Second))); err != nil {
+						a.status = "No se pudo mover la canción: " + err.Error()
+					} else {
+						a.status = "Posición actualizada"
+					}
+				}
 			} else {
-				a.status = "Reproducción pausada"
+				ui.Text(c, "Sin duración disponible")
 			}
-		}
-		if ui.Button(c, "Next").Clicked() {
-			a.playNext()
-		}
-		if ui.Button(c, "Repeat").Clicked() {
-			a.repeat = !a.repeat
-		}
-		if ui.Button(c, "Shuffle").Clicked() {
-			a.shuffle = !a.shuffle
-		}
-		ui.Textf(c, "repeat=%t shuffle=%t", a.repeat, a.shuffle)
+			ui.Text(c, formatDuration(duration))
+		})
+
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			if ui.Button(c, "Previous").Clicked() {
+				a.playPrevious()
+			}
+			if ui.PrimaryButton(c, playLabel).Clicked() {
+				if state.Playing {
+					if err := a.player.TogglePause(); err != nil {
+						a.status = "No se puede pausar/reanudar: " + err.Error()
+					} else if isPaused {
+						a.status = "Reproducción reanudada"
+					} else {
+						a.status = "Reproducción pausada"
+					}
+				} else {
+					a.playSelectedOrFirst()
+				}
+			}
+			if ui.Button(c, "Next").Clicked() {
+				a.playNext()
+			}
+			if ui.Button(c, "Repeat").Clicked() {
+				a.repeat = !a.repeat
+			}
+			if ui.Button(c, "Shuffle").Clicked() {
+				a.shuffle = !a.shuffle
+			}
+			ui.Textf(c, "repeat=%t shuffle=%t", a.repeat, a.shuffle)
+		})
 	})
 }
 
+func formatDuration(d time.Duration) string {
+	if d <= 0 {
+		return "--:--"
+	}
+	total := int(d.Round(time.Second).Seconds())
+	min := total / 60
+	sec := total % 60
+	return fmt.Sprintf("%02d:%02d", min, sec)
+}
+
+func (a *app) playSongByID(songID string) {
+	index, song, ok := a.findSong(songID)
+	if !ok {
+		a.status = "Canción no encontrada"
+		return
+	}
+	a.playSongAt(index, song)
+}
+
+func (a *app) playSelectedOrFirst() {
+	if a.selectedID != "" {
+		a.playSongByID(a.selectedID)
+		return
+	}
+	if len(a.store.Songs) > 0 {
+		a.playSongAt(0, a.store.Songs[0])
+	}
+}
+
+func (a *app) findSong(songID string) (int, model.Song, bool) {
+	for i, s := range a.store.Songs {
+		if s.ID == songID {
+			return i, s, true
+		}
+	}
+	return -1, model.Song{}, false
+}
+
+func (a *app) consumePlayerEvents() {
+	for {
+		select {
+		case ev := <-a.player.Events():
+			if ev.Type == player.EventTrackEnded {
+				if ev.Err != nil && !strings.Contains(ev.Err.Error(), "signal: killed") {
+					a.status = "Error de reproducción: " + ev.Err.Error()
+					return
+				}
+				a.playNextFromAutoEnd()
+				return
+			}
+		default:
+			return
+		}
+	}
+}
+
+func (a *app) playNextFromAutoEnd() {
+	if len(a.store.Songs) == 0 || a.playIndex < 0 {
+		a.status = "Reproducción finalizada"
+		return
+	}
+	if a.shuffle {
+		a.playIndex = int(time.Now().UnixNano() % int64(len(a.store.Songs)))
+		song := a.store.Songs[a.playIndex]
+		a.playSongAt(a.playIndex, song)
+		return
+	}
+	next := a.playIndex + 1
+	if next >= len(a.store.Songs) {
+		if !a.repeat {
+			a.status = "Fin de la cola"
+			return
+		}
+		next = 0
+	}
+	song := a.store.Songs[next]
+	a.playSongAt(next, song)
+}
+
+func (a *app) startUIHeartbeat() {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	go func() {
+		defer ticker.Stop()
+		for range ticker.C {
+			if a.window != nil {
+				a.window.Invalidate()
+			}
+		}
+	}()
+}
+
 func (a *app) playSongAt(index int, song model.Song) {
-	if err := a.player.Play(song.Path); err != nil {
+	if err := a.player.Play(song.Path, song.Duration); err != nil {
 		a.status = "Error reproduciendo: " + err.Error()
 		return
 	}
+	a.sliderAt = 0
 	a.playIndex = index
 	a.selectedID = song.ID
 	a.status = fmt.Sprintf("Reproduciendo: %s — %s", song.Artist, song.Title)
@@ -261,7 +393,11 @@ func (a *app) playPrevious() {
 		return
 	}
 	if a.playIndex <= 0 {
-		a.playIndex = 0
+		if !a.repeat {
+			a.playIndex = 0
+		} else {
+			a.playIndex = len(a.store.Songs) - 1
+		}
 	} else {
 		a.playIndex--
 	}
@@ -279,7 +415,8 @@ func (a *app) playNext() {
 		if a.repeat {
 			a.playIndex = 0
 		} else {
-			a.playIndex = len(a.store.Songs) - 1
+			a.status = "Fin de la cola"
+			return
 		}
 	} else {
 		a.playIndex++
@@ -291,7 +428,7 @@ func (a *app) playNext() {
 func main() {
 	a := newApp()
 	mygo.App.WhenReady(func() {
-		mygo.NewWindow(mygo.WindowOptions{
+		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "Musaik",
 			Width:     1100,
 			Height:    780,
@@ -300,6 +437,8 @@ func main() {
 			StateKey:  "main",
 			Content:   ui.View(a.view),
 		})
+		a.window = win
+		a.startUIHeartbeat()
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)

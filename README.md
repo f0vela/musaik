@@ -16,6 +16,7 @@ Actualmente existe un MVP funcional con:
 - Controles base de reproducción:
   - previous, play/pause, next
   - repeat, shuffle, like
+- Barra de progreso con tiempo actual/total y seek directo en UI.
 - Persistencia local de estado (favoritos y playlists).
 - Integración base con Last.fm:
   - update now playing
@@ -26,7 +27,7 @@ Actualmente existe un MVP funcional con:
 
 - Go 1.27+
 - Mygo CLI (como tool de Go)
-- Opcional para reproducción más completa de formatos: `ffplay` (ffmpeg)
+- `ffplay` y `ffprobe` (incluidos en ffmpeg) para reproducción con progreso/seek.
 
 ## Desarrollo local
 
