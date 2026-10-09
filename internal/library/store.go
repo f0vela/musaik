@@ -32,9 +32,21 @@ func NewStore() *Store {
 }
 
 func (s *Store) Index(root string) error {
+	oldCounts := make(map[string]int, len(s.Songs))
+	for _, song := range s.Songs {
+		if song.PlayCount > 0 {
+			oldCounts[song.ID] = song.PlayCount
+		}
+	}
+
 	songs, err := Scan(root)
 	if err != nil {
 		return err
+	}
+	for i := range songs {
+		if count, ok := oldCounts[songs[i].ID]; ok {
+			songs[i].PlayCount = count
+		}
 	}
 	s.Root = root
 	s.Songs = songs
@@ -115,6 +127,50 @@ func (s *Store) AddManualPlaylist(name string, songIDs []string) {
 		Name:       name,
 		ManualSong: ids,
 	})
+}
+
+func (s *Store) IncrementPlayCount(songID string) (int, bool) {
+	for i := range s.Songs {
+		if s.Songs[i].ID != songID {
+			continue
+		}
+		s.Songs[i].PlayCount++
+		return s.Songs[i].PlayCount, true
+	}
+	return 0, false
+}
+
+func (s *Store) SetPlayCount(songID string, count int) bool {
+	if count < 0 {
+		count = 0
+	}
+	for i := range s.Songs {
+		if s.Songs[i].ID != songID {
+			continue
+		}
+		s.Songs[i].PlayCount = count
+		return true
+	}
+	return false
+}
+
+func (s *Store) AddSongToManualPlaylist(name, songID string) error {
+	for i := range s.Playlists {
+		if s.Playlists[i].Name != name {
+			continue
+		}
+		if s.Playlists[i].Smart != nil || s.Playlists[i].Name == "Todos" {
+			return fmt.Errorf("playlist %q no admite edición manual", name)
+		}
+		for _, id := range s.Playlists[i].ManualSong {
+			if id == songID {
+				return nil
+			}
+		}
+		s.Playlists[i].ManualSong = append(s.Playlists[i].ManualSong, songID)
+		return nil
+	}
+	return fmt.Errorf("playlist %q no encontrada", name)
 }
 
 func (s *Store) rebuildIndexes() {

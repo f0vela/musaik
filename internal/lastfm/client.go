@@ -129,6 +129,21 @@ func (c *Client) Scrobble(song model.Song, at time.Time) error {
 	return c.postSigned(params)
 }
 
+func (c *Client) LoveTrack(song model.Song) error {
+	if !c.Enabled() {
+		return nil
+	}
+	params := map[string]string{
+		"method":  "track.love",
+		"artist":  song.Artist,
+		"track":   song.Title,
+		"api_key": c.APIKey,
+		"sk":      c.SessionKey,
+		"format":  "json",
+	}
+	return c.postSigned(params)
+}
+
 func (c *Client) UserPlayCount(song model.Song) (int, error) {
 	if c.APIKey == "" || c.Username == "" {
 		return 0, nil

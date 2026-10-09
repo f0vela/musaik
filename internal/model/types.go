@@ -3,13 +3,15 @@ package model
 import "time"
 
 type Song struct {
-	ID       string
-	Path     string
-	Title    string
-	Artist   string
-	Album    string
-	Duration time.Duration
-	Format   string
+	ID        string
+	Path      string
+	Title     string
+	Artist    string
+	Album     string
+	TrackNum  int
+	Duration  time.Duration
+	Format    string
+	PlayCount int
 }
 
 type SmartPlaylistFilter struct {

@@ -55,6 +55,9 @@ func readMetadata(path string) model.Song {
 	if meta.Album() != "" {
 		song.Album = meta.Album()
 	}
+	if track, _ := meta.Track(); track > 0 {
+		song.TrackNum = track
+	}
 	return song
 }
 

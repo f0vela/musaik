@@ -21,7 +21,12 @@ Actualmente existe un MVP funcional con:
 - Integración base con Last.fm:
   - update now playing
   - scrobble
+  - like (`track.love`) al marcar favoritos en la app
   - consulta de `userplaycount` por canción
+  - conexión automática desde Ajustes para obtener y guardar `session_key`
+- Integración iPod Classic (modo disco):
+  - detección automática en `/Volumes`
+  - exportación de playlist al iPod (copiado de archivos + `.m3u8`)
 
 ## Requisitos
 
@@ -58,16 +63,27 @@ go tool mygo build
 
 ## Last.fm
 
-Configura variables de entorno:
+Puedes configurar Last.fm por variables de entorno o desde **Ajustes**.
+
+Variables de entorno (opcional):
 
 ```bash
 export LASTFM_API_KEY="..."
 export LASTFM_API_SECRET="..."
-export LASTFM_SESSION_KEY="..."
+export LASTFM_SESSION_KEY="..." # opcional si conectas desde Ajustes
 export LASTFM_USERNAME="..."
 ```
 
-La obtención de `LASTFM_SESSION_KEY` aún no está integrada en UI; hoy se carga por variables de entorno.
+En Ajustes existe un botón para autorización automática que abre navegador y guarda `session_key`.
+
+## iPod Classic (5th gen / Video)
+
+En **Ajustes**:
+
+- `Detectar iPod Classic`: busca dispositivos montados en `/Volumes`.
+- `Sincronizar playlist a iPod`: copia canciones a `iPod_Control/Music/F00` y genera playlist `.m3u8` en `Playlists/`.
+
+Nota: la exportación actual no reescribe `iTunesDB`; según firmware/flujo del iPod puede requerir gestor externo para reflejar biblioteca Apple nativa.
 
 ## Pendientes
 

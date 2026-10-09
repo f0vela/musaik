@@ -54,6 +54,41 @@ func TestSmartPlaylistFavoritesFilter(t *testing.T) {
 	}
 }
 
+func TestPlayCountOperations(t *testing.T) {
+	s := NewStore()
+	s.Songs = []model.Song{
+		{ID: "1", Title: "Song A"},
+	}
+
+	count, ok := s.IncrementPlayCount("1")
+	if !ok || count != 1 {
+		t.Fatalf("expected increment count 1, got count=%d ok=%t", count, ok)
+	}
+	if !s.SetPlayCount("1", 7) {
+		t.Fatal("expected SetPlayCount to succeed")
+	}
+	if s.Songs[0].PlayCount != 7 {
+		t.Fatalf("expected play count 7, got %d", s.Songs[0].PlayCount)
+	}
+}
+
+func TestAddSongToManualPlaylist(t *testing.T) {
+	s := NewStore()
+	s.AddManualPlaylist("Ruta", nil)
+	if err := s.AddSongToManualPlaylist("Ruta", "song-1"); err != nil {
+		t.Fatalf("unexpected add song error: %v", err)
+	}
+	if err := s.AddSongToManualPlaylist("Ruta", "song-1"); err != nil {
+		t.Fatalf("expected duplicate add to be ignored, got error: %v", err)
+	}
+	if len(s.Playlists) == 0 || len(s.Playlists[len(s.Playlists)-1].ManualSong) != 1 {
+		t.Fatalf("expected one song in manual playlist, got %+v", s.Playlists)
+	}
+	if err := s.AddSongToManualPlaylist("Favoritos", "song-1"); err == nil {
+		t.Fatal("expected smart playlist add to fail")
+	}
+}
+
 func writeEmpty(path string) error {
 	return os.WriteFile(path, []byte(""), 0o644)
 }
