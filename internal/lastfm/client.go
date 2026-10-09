@@ -1,0 +1,180 @@
+package lastfm
+
+import (
+	"crypto/md5"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"musaik/internal/model"
+)
+
+const apiURL = "https://ws.audioscrobbler.com/2.0/"
+
+type Client struct {
+	APIKey     string
+	APISecret  string
+	SessionKey string
+	Username   string
+	HTTP       *http.Client
+}
+
+func New(apiKey, apiSecret, sessionKey, username string) *Client {
+	return &Client{
+		APIKey:     apiKey,
+		APISecret:  apiSecret,
+		SessionKey: sessionKey,
+		Username:   username,
+		HTTP:       &http.Client{Timeout: 15 * time.Second},
+	}
+}
+
+func (c *Client) Enabled() bool {
+	return c.APIKey != "" && c.APISecret != "" && c.SessionKey != "" && c.Username != ""
+}
+
+func (c *Client) UpdateNowPlaying(song model.Song) error {
+	if !c.Enabled() {
+		return nil
+	}
+	params := map[string]string{
+		"method":  "track.updateNowPlaying",
+		"artist":  song.Artist,
+		"track":   song.Title,
+		"album":   song.Album,
+		"api_key": c.APIKey,
+		"sk":      c.SessionKey,
+		"format":  "json",
+	}
+	return c.postSigned(params)
+}
+
+func (c *Client) Scrobble(song model.Song, at time.Time) error {
+	if !c.Enabled() {
+		return nil
+	}
+	params := map[string]string{
+		"method":       "track.scrobble",
+		"artist":       song.Artist,
+		"track":        song.Title,
+		"album":        song.Album,
+		"timestamp":    strconv.FormatInt(at.Unix(), 10),
+		"api_key":      c.APIKey,
+		"sk":           c.SessionKey,
+		"chosenByUser": "1",
+		"format":       "json",
+	}
+	return c.postSigned(params)
+}
+
+func (c *Client) UserPlayCount(song model.Song) (int, error) {
+	if c.APIKey == "" || c.Username == "" {
+		return 0, nil
+	}
+	v := url.Values{}
+	v.Set("method", "track.getInfo")
+	v.Set("api_key", c.APIKey)
+	v.Set("artist", song.Artist)
+	v.Set("track", song.Title)
+	v.Set("username", c.Username)
+	v.Set("format", "json")
+
+	reqURL := apiURL + "?" + v.Encode()
+	resp, err := c.HTTP.Get(reqURL)
+	if err != nil {
+		return 0, fmt.Errorf("request track.getInfo: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("read track.getInfo response: %w", err)
+	}
+
+	var payload struct {
+		Error   int    `json:"error"`
+		Message string `json:"message"`
+		Track   struct {
+			UserPlaycount string `json:"userplaycount"`
+		} `json:"track"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return 0, fmt.Errorf("decode track.getInfo: %w", err)
+	}
+	if payload.Error != 0 {
+		return 0, fmt.Errorf("last.fm error %d: %s", payload.Error, payload.Message)
+	}
+
+	if payload.Track.UserPlaycount == "" {
+		return 0, nil
+	}
+	count, err := strconv.Atoi(payload.Track.UserPlaycount)
+	if err != nil {
+		return 0, fmt.Errorf("parse userplaycount: %w", err)
+	}
+	return count, nil
+}
+
+func (c *Client) postSigned(params map[string]string) error {
+	v := url.Values{}
+	for k, val := range params {
+		v.Set(k, val)
+	}
+	v.Set("api_sig", c.signature(params))
+
+	resp, err := c.HTTP.PostForm(apiURL, v)
+	if err != nil {
+		return fmt.Errorf("post last.fm: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read last.fm response: %w", err)
+	}
+
+	var payload struct {
+		Error   int    `json:"error"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return fmt.Errorf("decode last.fm response: %w", err)
+	}
+	if payload.Error != 0 {
+		return fmt.Errorf("last.fm error %d: %s", payload.Error, payload.Message)
+	}
+	return nil
+}
+
+func (c *Client) signature(params map[string]string) string {
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		if k == "format" || k == "callback" {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	// Stable lexical order.
+	for i := 0; i < len(keys)-1; i++ {
+		for j := i + 1; j < len(keys); j++ {
+			if keys[j] < keys[i] {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteString(params[k])
+	}
+	b.WriteString(c.APISecret)
+
+	sum := md5.Sum([]byte(b.String()))
+	return hex.EncodeToString(sum[:])
+}
