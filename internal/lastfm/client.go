@@ -39,6 +39,62 @@ func (c *Client) Enabled() bool {
 	return c.APIKey != "" && c.APISecret != "" && c.SessionKey != "" && c.Username != ""
 }
 
+func (c *Client) AuthURL(callbackURL string) string {
+	v := url.Values{}
+	v.Set("api_key", c.APIKey)
+	if callbackURL != "" {
+		v.Set("cb", callbackURL)
+	}
+	return "https://www.last.fm/api/auth/?" + v.Encode()
+}
+
+func (c *Client) SessionFromToken(token string) (sessionKey string, username string, err error) {
+	if c.APIKey == "" || c.APISecret == "" {
+		return "", "", fmt.Errorf("missing API key or shared secret")
+	}
+	params := map[string]string{
+		"method":  "auth.getSession",
+		"api_key": c.APIKey,
+		"token":   token,
+		"format":  "json",
+	}
+	v := url.Values{}
+	for k, val := range params {
+		v.Set(k, val)
+	}
+	v.Set("api_sig", c.signature(params))
+
+	resp, err := c.HTTP.PostForm(apiURL, v)
+	if err != nil {
+		return "", "", fmt.Errorf("post auth.getSession: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("read auth.getSession response: %w", err)
+	}
+
+	var payload struct {
+		Error   int    `json:"error"`
+		Message string `json:"message"`
+		Session struct {
+			Name string `json:"name"`
+			Key  string `json:"key"`
+		} `json:"session"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", "", fmt.Errorf("decode auth.getSession response: %w", err)
+	}
+	if payload.Error != 0 {
+		return "", "", fmt.Errorf("last.fm error %d: %s", payload.Error, payload.Message)
+	}
+	if payload.Session.Key == "" {
+		return "", "", fmt.Errorf("last.fm did not return session key")
+	}
+	return payload.Session.Key, payload.Session.Name, nil
+}
+
 func (c *Client) UpdateNowPlaying(song model.Song) error {
 	if !c.Enabled() {
 		return nil

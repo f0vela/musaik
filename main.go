@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,11 +25,14 @@ import (
 type section string
 
 const (
+	sectionExplore   section = "Explorar"
+	sectionRecent    section = "Recientes"
 	sectionLibrary   section = "Librería"
 	sectionArtists   section = "Artistas"
 	sectionAlbums    section = "Álbumes"
 	sectionFavorites section = "Favoritos"
 	sectionPlaylists section = "Playlists"
+	sectionSettings  section = "Ajustes"
 )
 
 var (
@@ -63,34 +69,42 @@ type app struct {
 	playIndex   int
 	shuffle     bool
 	repeat      bool
+
+	lastfmAPIKey     string
+	lastfmAPISecret  string
+	lastfmSessionKey string
+	lastfmUsername   string
+	lastfmAuthBusy   bool
 }
 
 type appSettings struct {
-	Section     string `json:"section"`
-	Shuffle     bool   `json:"shuffle"`
-	Repeat      bool   `json:"repeat"`
-	RootInput   string `json:"root_input"`
-	SearchQuery string `json:"search_query"`
+	Section          string `json:"section"`
+	Shuffle          bool   `json:"shuffle"`
+	Repeat           bool   `json:"repeat"`
+	RootInput        string `json:"root_input"`
+	SearchQuery      string `json:"search_query"`
+	LastFMAPIKey     string `json:"lastfm_api_key"`
+	LastFMAPISecret  string `json:"lastfm_api_secret"`
+	LastFMSessionKey string `json:"lastfm_session_key"`
+	LastFMUsername   string `json:"lastfm_username"`
 }
 
 func newApp() *app {
 	a := &app{
-		store:       library.NewStore(),
-		player:      player.New(),
-		section:     sectionLibrary,
-		rootInput:   defaultMusicDir(),
-		searchQuery: "",
-		status:      "Listo para indexar música",
-		selectedID:  "",
-		playIndex:   -1,
-		covers:      map[string]*ui.Bitmap{},
-		coverLRU:    []string{},
-		lastfm: lastfm.New(
-			os.Getenv("LASTFM_API_KEY"),
-			os.Getenv("LASTFM_API_SECRET"),
-			os.Getenv("LASTFM_SESSION_KEY"),
-			os.Getenv("LASTFM_USERNAME"),
-		),
+		store:            library.NewStore(),
+		player:           player.New(),
+		section:          sectionExplore,
+		rootInput:        defaultMusicDir(),
+		searchQuery:      "",
+		status:           "Listo para indexar música",
+		selectedID:       "",
+		playIndex:        -1,
+		covers:           map[string]*ui.Bitmap{},
+		coverLRU:         []string{},
+		lastfmAPIKey:     os.Getenv("LASTFM_API_KEY"),
+		lastfmAPISecret:  os.Getenv("LASTFM_API_SECRET"),
+		lastfmSessionKey: os.Getenv("LASTFM_SESSION_KEY"),
+		lastfmUsername:   os.Getenv("LASTFM_USERNAME"),
 	}
 	_ = a.store.LoadState()
 	if a.store.Root != "" {
@@ -103,7 +117,17 @@ func newApp() *app {
 	if len(a.store.Songs) > 0 {
 		a.status = fmt.Sprintf("Biblioteca cargada: %d canciones", len(a.store.Songs))
 	}
+	a.refreshLastFMClient()
 	return a
+}
+
+func (a *app) refreshLastFMClient() {
+	a.lastfm = lastfm.New(
+		a.lastfmAPIKey,
+		a.lastfmAPISecret,
+		a.lastfmSessionKey,
+		a.lastfmUsername,
+	)
 }
 
 func defaultMusicDir() string {
@@ -132,11 +156,15 @@ func (a *app) saveSettings() error {
 		return err
 	}
 	s := appSettings{
-		Section:     string(a.section),
-		Shuffle:     a.shuffle,
-		Repeat:      a.repeat,
-		RootInput:   a.rootInput,
-		SearchQuery: a.searchQuery,
+		Section:          string(a.section),
+		Shuffle:          a.shuffle,
+		Repeat:           a.repeat,
+		RootInput:        a.rootInput,
+		SearchQuery:      a.searchQuery,
+		LastFMAPIKey:     a.lastfmAPIKey,
+		LastFMAPISecret:  a.lastfmAPISecret,
+		LastFMSessionKey: a.lastfmSessionKey,
+		LastFMUsername:   a.lastfmUsername,
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -162,7 +190,7 @@ func (a *app) loadSettings() error {
 		return err
 	}
 	switch section(s.Section) {
-	case sectionLibrary, sectionArtists, sectionAlbums, sectionFavorites, sectionPlaylists:
+	case sectionExplore, sectionRecent, sectionLibrary, sectionArtists, sectionAlbums, sectionFavorites, sectionPlaylists, sectionSettings:
 		a.section = section(s.Section)
 	}
 	a.shuffle = s.Shuffle
@@ -171,12 +199,120 @@ func (a *app) loadSettings() error {
 		a.rootInput = s.RootInput
 	}
 	a.searchQuery = s.SearchQuery
+	if s.LastFMAPIKey != "" {
+		a.lastfmAPIKey = s.LastFMAPIKey
+	}
+	if s.LastFMAPISecret != "" {
+		a.lastfmAPISecret = s.LastFMAPISecret
+	}
+	if s.LastFMSessionKey != "" {
+		a.lastfmSessionKey = s.LastFMSessionKey
+	}
+	if s.LastFMUsername != "" {
+		a.lastfmUsername = s.LastFMUsername
+	}
 	return nil
 }
 
 func (a *app) persistAll() {
 	_ = a.store.SaveState()
 	_ = a.saveSettings()
+}
+
+func (a *app) startLastFMAutoConnect() {
+	if a.lastfmAPIKey == "" || a.lastfmAPISecret == "" {
+		a.status = "Falta API key/shared secret de Last.fm"
+		return
+	}
+	if a.lastfmAuthBusy {
+		a.status = "Autorización Last.fm en progreso"
+		return
+	}
+	a.lastfmAuthBusy = true
+	a.status = "Abriendo autorización de Last.fm en tu navegador…"
+
+	go func() {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			a.updateUI(func() {
+				a.lastfmAuthBusy = false
+				a.status = "No se pudo iniciar callback local de Last.fm: " + err.Error()
+			})
+			return
+		}
+
+		callbackURL := "http://" + listener.Addr().String() + "/callback"
+		client := lastfm.New(a.lastfmAPIKey, a.lastfmAPISecret, "", a.lastfmUsername)
+		authURL := client.AuthURL(callbackURL)
+
+		tokenCh := make(chan string, 1)
+		server := &http.Server{
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				token := r.URL.Query().Get("token")
+				if token == "" {
+					http.Error(w, "Token missing in callback", http.StatusBadRequest)
+					return
+				}
+				_, _ = w.Write([]byte("Last.fm conectado. Puedes cerrar esta pestaña y volver a Musaik."))
+				select {
+				case tokenCh <- token:
+				default:
+				}
+			}),
+		}
+
+		go func() {
+			_ = server.Serve(listener)
+		}()
+
+		if err := mygo.Shell.OpenExternal(authURL); err != nil {
+			_ = server.Close()
+			a.updateUI(func() {
+				a.lastfmAuthBusy = false
+				a.status = "No se pudo abrir navegador para Last.fm: " + err.Error()
+			})
+			return
+		}
+
+		select {
+		case token := <-tokenCh:
+			sessionKey, username, err := client.SessionFromToken(token)
+			_ = server.Close()
+			if err != nil {
+				a.updateUI(func() {
+					a.lastfmAuthBusy = false
+					a.status = "Falló auth.getSession de Last.fm: " + err.Error()
+				})
+				return
+			}
+			a.updateUI(func() {
+				a.lastfmSessionKey = sessionKey
+				if username != "" {
+					a.lastfmUsername = username
+				}
+				a.refreshLastFMClient()
+				a.persistAll()
+				a.lastfmAuthBusy = false
+				a.status = "Last.fm conectado correctamente"
+			})
+		case <-time.After(5 * time.Minute):
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			_ = server.Shutdown(ctx)
+			cancel()
+			a.updateUI(func() {
+				a.lastfmAuthBusy = false
+				a.status = "Tiempo de espera agotado en autorización Last.fm"
+			})
+		}
+	}()
+}
+
+func (a *app) updateUI(fn func()) {
+	if a.window != nil {
+		a.window.Update(fn)
+		return
+	}
+	fn()
 }
 
 func (a *app) view(c *ui.Context) {
@@ -187,7 +323,6 @@ func (a *app) view(c *ui.Context) {
 		ui.Row(c).Grow(1).Padding(16).Gap(14).AlignItems(ui.Stretch).Children(func() {
 			a.viewSidebar(c)
 			ui.Column(c).Grow(1).Gap(12).Children(func() {
-				a.viewSections(c)
 				a.viewMain(c)
 			})
 		})
@@ -226,7 +361,14 @@ func (a *app) viewTopBar(c *ui.Context) {
 		AlignItems(ui.Center).
 		Gap(12).
 		Children(func() {
-			ui.Text(c, "Musaik").FontSize(24).Bold().TextColor(sonoraText)
+			ui.Row(c).Gap(6).Children(func() {
+				ui.Button(c, "‹").Width(28)
+				ui.Button(c, "›").Width(28)
+			})
+			ui.Box(c).Size(24, 24).Radius(6).Background(ui.RGBA(244, 63, 94, 0.35)).Children(func() {
+				ui.Column(c).Fill().Center().Children(func() { ui.Text(c, "♪").FontSize(10) })
+			})
+			ui.Text(c, "Musaik").FontSize(28).Bold().TextColor(sonoraText)
 			ui.TextInput(c, &a.searchQuery).
 				Placeholder("Buscar en la biblioteca").
 				Width(360)
@@ -238,61 +380,58 @@ func (a *app) viewTopBar(c *ui.Context) {
 			}
 			ui.Spacer(c)
 			ui.Text(c, "Chord Hugo 2 DAC").FontSize(12).TextColor(sonoraTextMuted)
+			ui.Text(c, "▮▮").TextColor(sonoraTextMuted)
+			ui.Box(c).Size(24, 24).Radius(12).Background(ui.RGBA(255, 255, 255, 0.12))
 		})
 }
 
 func (a *app) viewSidebar(c *ui.Context) {
 	ui.Column(c).
-		Width(248).
-		Grow(1).
-		Padding(14, 12).
-		Gap(10).
+		Width(172).
+		Padding(12, 8).
+		Gap(8).
 		Background(sonoraSidebar).
 		Border(1, sonoraBorder).
 		Radius(12).
 		Children(func() {
-			ui.Text(c, "Origen").FontSize(11).FontWeight(600).TextColor(sonoraTextTertiary)
-			ui.TextInput(c, &a.rootInput).Placeholder("/Users/.../Music")
-			if ui.PrimaryButton(c, "Indexar biblioteca").Width(220).Clicked() {
-				if err := a.store.Index(a.rootInput); err != nil {
-					a.status = "Error indexando: " + err.Error()
-				} else {
-					a.covers = map[string]*ui.Bitmap{}
-					a.coverLRU = nil
-					a.status = fmt.Sprintf("Indexadas %d canciones", len(a.store.Songs))
-					if len(a.store.Songs) > 0 {
-						a.selectedID = a.store.Songs[0].ID
-					}
-					a.persistAll()
-				}
-			}
-			if ui.Button(c, "Guardar estado").Width(220).Clicked() {
-				if err := a.store.SaveState(); err != nil {
-					a.status = "Error guardando estado: " + err.Error()
-				} else {
-					_ = a.saveSettings()
-					a.status = "Estado guardado"
-				}
-			}
-
-			ui.Box(c).Height(8)
 			ui.Text(c, "Biblioteca").FontSize(11).FontWeight(600).TextColor(sonoraTextTertiary)
-			a.sidebarNavButton(c, sectionLibrary, "Canciones")
-			a.sidebarNavButton(c, sectionArtists, "Artistas")
-			a.sidebarNavButton(c, sectionAlbums, "Álbumes")
-			a.sidebarNavButton(c, sectionFavorites, "Favoritos")
-			a.sidebarNavButton(c, sectionPlaylists, "Playlists")
+			a.sidebarNavButton(c, sectionExplore, "◉", "Explorar")
+			a.sidebarNavButton(c, sectionRecent, "◔", "Recientes")
+			a.sidebarNavButton(c, sectionLibrary, "♪", "Canciones")
+			ui.Box(c).Height(6)
+			ui.Text(c, "Colección").FontSize(11).FontWeight(600).TextColor(sonoraTextTertiary)
+			a.sidebarNavButton(c, sectionAlbums, "◈", "Álbumes")
+			a.sidebarNavButton(c, sectionArtists, "◉", "Artistas")
+			a.sidebarNavButton(c, sectionFavorites, "♡", "Favoritos")
+			a.sidebarNavButton(c, sectionPlaylists, "≡", "Playlists")
+			ui.Box(c).Height(8)
+			ui.Text(c, "Playlists").FontSize(11).FontWeight(600).TextColor(sonoraTextTertiary)
+			a.sidebarPlaylist(c, "≣", "Descubrimiento Audiófilo")
+			a.sidebarPlaylist(c, "≣", "Late Night Lo-Fi")
+			a.sidebarPlaylist(c, "≣", "Acoustic Masterpieces")
+			a.sidebarPlaylist(c, "≣", "Synthwave Horizons")
+			ui.Box(c).Height(8)
+			ui.Text(c, "Sistema").FontSize(11).FontWeight(600).TextColor(sonoraTextTertiary)
+			a.sidebarNavButton(c, sectionSettings, "⚙", "Ajustes")
 			ui.Spacer(c)
-			ui.Text(c, a.status).FontSize(11).TextColor(sonoraTextMuted)
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Box(c).Size(28, 28).Radius(8).Background(ui.RGBA(6, 182, 212, 0.2)).Children(func() {
+					ui.Column(c).Fill().Center().Children(func() { ui.Text(c, "≋").FontSize(10).TextColor(sonoraTertiary) })
+				})
+				ui.Column(c).Gap(2).Children(func() {
+					ui.Text(c, "Audio engine").FontSize(11).TextColor(sonoraTertiary)
+					ui.Text(c, "Bit-Perfect 192kHz").FontSize(10).TextColor(sonoraTextMuted)
+				})
+			})
 		})
 }
 
-func (a *app) sidebarNavButton(c *ui.Context, sec section, label string) {
-	btn := ui.Button(c, label).Width(220)
+func (a *app) sidebarNavButton(c *ui.Context, sec section, icon, label string) {
+	btn := ui.Button(c, icon+" "+label)
 	if a.section == sec {
-		btn.Background(ui.RGBA(244, 63, 94, 0.22)).TextColor(sonoraText)
+		btn.Background(ui.RGBA(244, 63, 94, 0.14)).TextColor(sonoraText)
 	} else {
-		btn.Background(ui.RGBA(255, 255, 255, 0.03)).TextColor(sonoraTextMuted)
+		btn.Background(ui.RGBA(255, 255, 255, 0.00)).TextColor(sonoraTextMuted)
 	}
 	if btn.Clicked() {
 		a.section = sec
@@ -300,59 +439,20 @@ func (a *app) sidebarNavButton(c *ui.Context, sec section, label string) {
 	}
 }
 
-func (a *app) viewSourceBar(c *ui.Context) {
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.TextInput(c, &a.rootInput).Label("Carpeta raíz").Width(560)
-		if ui.PrimaryButton(c, "Indexar").Clicked() {
-			if err := a.store.Index(a.rootInput); err != nil {
-				a.status = "Error indexando: " + err.Error()
-			} else {
-				a.status = fmt.Sprintf("Indexadas %d canciones", len(a.store.Songs))
-				if len(a.store.Songs) > 0 {
-					a.selectedID = a.store.Songs[0].ID
-				}
-			}
-		}
-		if ui.Button(c, "Guardar estado").Clicked() {
-			if err := a.store.SaveState(); err != nil {
-				a.status = "Error guardando estado: " + err.Error()
-			} else {
-				a.status = "Estado guardado"
-			}
-		}
-	})
-}
-
-func (a *app) viewSections(c *ui.Context) {
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		a.sectionButton(c, sectionLibrary)
-		a.sectionButton(c, sectionArtists)
-		a.sectionButton(c, sectionAlbums)
-		a.sectionButton(c, sectionFavorites)
-		a.sectionButton(c, sectionPlaylists)
-	})
-}
-
-func (a *app) sectionButton(c *ui.Context, sec section) {
-	label := string(sec)
-	btn := ui.Button(c, label)
-	if a.section == sec {
-		btn.Background(ui.RGBA(244, 63, 94, 0.18)).TextColor(sonoraText)
-	} else {
-		btn.Background(ui.RGBA(255, 255, 255, 0.04)).TextColor(sonoraTextMuted)
-	}
-	if btn.Clicked() {
-		a.section = sec
-	}
+func (a *app) sidebarPlaylist(c *ui.Context, icon, label string) {
+	ui.Button(c, icon+" "+label).Background(ui.RGBA(255, 255, 255, 0.00)).TextColor(sonoraTextMuted)
 }
 
 func (a *app) viewMain(c *ui.Context) {
 	ui.Column(c).Grow(1).Gap(12).Children(func() {
-		a.viewHero(c)
 		switch a.section {
+		case sectionExplore, sectionRecent:
+			a.viewExplore(c)
 		case sectionLibrary:
+			a.viewHero(c)
 			a.viewSongs(c, a.filteredSongs(a.store.Songs))
 		case sectionArtists:
+			a.viewHero(c)
 			ui.Scroll(c).Grow(1).Gap(8).Children(func() {
 				for _, artist := range a.store.Artists() {
 					ui.Row(c).
@@ -366,19 +466,10 @@ func (a *app) viewMain(c *ui.Context) {
 				}
 			})
 		case sectionAlbums:
-			ui.Scroll(c).Grow(1).Gap(8).Children(func() {
-				for _, album := range a.store.Albums() {
-					ui.Row(c).
-						Padding(8, 10).
-						Background(ui.RGBA(255, 255, 255, 0.03)).
-						Border(1, sonoraBorder).
-						Radius(10).
-						Children(func() {
-							ui.Text(c, "💿 "+album).TextColor(sonoraText)
-						})
-				}
-			})
+			a.viewHero(c)
+			a.viewAlbumsGrid(c)
 		case sectionFavorites:
+			a.viewHero(c)
 			favs := make([]model.Song, 0, len(a.store.Songs))
 			for _, song := range a.store.Songs {
 				if a.store.Favorites[song.ID] {
@@ -387,6 +478,7 @@ func (a *app) viewMain(c *ui.Context) {
 			}
 			a.viewSongs(c, a.filteredSongs(favs))
 		case sectionPlaylists:
+			a.viewHero(c)
 			ui.Scroll(c).Grow(1).Gap(10).Children(func() {
 				for _, pl := range a.store.Playlists {
 					count := len(a.store.PlaylistSongs(pl))
@@ -408,8 +500,154 @@ func (a *app) viewMain(c *ui.Context) {
 					_ = a.store.SaveState()
 				}
 			})
+		case sectionSettings:
+			a.viewSettings(c)
 		}
 	})
+}
+
+func (a *app) viewExplore(c *ui.Context) {
+	ui.Scroll(c).Grow(1).Gap(12).Children(func() {
+		a.viewHero(c)
+		ui.Row(c).Gap(8).Children(func() {
+			chips := []string{"Todos", "Electrónica", "Ambient", "Post-Rock", "Jazz", "Clásica"}
+			for i, chip := range chips {
+				btn := ui.Button(c, chip)
+				if i == 0 {
+					btn.Background(ui.RGBA(244, 63, 94, 0.18)).TextColor(sonoraText)
+				} else {
+					btn.Background(ui.RGBA(255, 255, 255, 0.05)).TextColor(sonoraTextMuted)
+				}
+			}
+		})
+
+		ui.Row(c).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Grow(1).Gap(2).Children(func() {
+				ui.Text(c, "Añadidos recientemente a tu biblioteca local").FontSize(40).FontWeight(700).TextColor(sonoraText)
+				ui.Text(c, "Archivos de almacenamiento interno bit-perfect y sincronizados").TextColor(sonoraTextMuted)
+			})
+			ui.Text(c, "Ver todos los álbumes →").TextColor(sonoraAccent)
+		})
+
+		a.viewAlbumStrip(c, a.albumRepresentativeSongs(), 6)
+
+		ui.Row(c).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Grow(1).Gap(2).Children(func() {
+				ui.Text(c, "Álbumes en alta resolución").FontSize(34).FontWeight(700).TextColor(sonoraText)
+				ui.Text(c, "Remasterizaciones certificadas y grabaciones directas sin pérdida").TextColor(sonoraTextMuted)
+			})
+			ui.Text(c, "● DAC ACTIVO: BIT-PERFECT").Font("monospace").TextColor(sonoraTertiary)
+		})
+		a.viewHiResRows(c, a.albumRepresentativeSongs(), 3)
+
+		ui.Row(c).Padding(12, 14).Background(ui.RGBA(255, 255, 255, 0.04)).Border(1, sonoraBorder).Radius(12).Children(func() {
+			ui.Column(c).Grow(1).Gap(2).Children(func() {
+				ui.Text(c, "Ruta de señal directa (Bit-Perfect mode)").FontWeight(700)
+				ui.Text(c, "El mezclador del sistema macOS está en modo de derivación por hardware.").TextColor(sonoraTextMuted)
+			})
+			ui.Button(c, "Configurar DSP")
+		})
+	})
+}
+
+func (a *app) viewAlbumsGrid(c *ui.Context) {
+	albums := a.albumRepresentativeSongs()
+	if len(albums) == 0 {
+		ui.Row(c).
+			Padding(14, 16).
+			Background(ui.RGBA(255, 255, 255, 0.03)).
+			Border(1, sonoraBorder).
+			Radius(10).
+			Children(func() {
+				ui.Text(c, "No hay álbumes").TextColor(sonoraTextMuted)
+			})
+		return
+	}
+
+	ui.GridView(c, nil, len(albums), 170, 232, func(i int) {
+		s := albums[i]
+		ui.Column(c).
+			Padding(8, 8).
+			Gap(8).
+			Background(ui.RGBA(255, 255, 255, 0.03)).
+			Border(1, sonoraBorder).
+			Radius(10).
+			Children(func() {
+				ui.Box(c).Size(160, 160).Radius(10).Background(ui.RGBA(255, 255, 255, 0.06)).Children(func() {
+					if bmp := a.coverBitmap(s); bmp != nil {
+						ui.Image(c, bmp).Fill().Fit(ui.Cover).Radius(10)
+					}
+				})
+				ui.Text(c, s.Album).SingleLine().TextColor(sonoraText)
+				ui.Text(c, s.Artist).SingleLine().FontSize(12).TextColor(sonoraTextMuted)
+			})
+	}).Grow(1)
+}
+
+func (a *app) viewSettings(c *ui.Context) {
+	ui.Column(c).
+		Padding(14, 16).
+		Gap(12).
+		Background(sonoraCard).
+		Border(1, sonoraBorder).
+		Radius(12).
+		Children(func() {
+			ui.Text(c, "Ajustes de biblioteca").FontSize(20).FontWeight(700).TextColor(sonoraText)
+			ui.Text(c, "Selecciona la carpeta raíz e indexa cuando cambie tu colección.").TextColor(sonoraTextMuted)
+			ui.TextInput(c, &a.rootInput).Label("Carpeta raíz").Width(640)
+			ui.Row(c).Gap(10).Children(func() {
+				if ui.PrimaryButton(c, "Indexar biblioteca").Clicked() {
+					a.indexLibrary()
+				}
+				if ui.Button(c, "Guardar estado").Clicked() {
+					if err := a.store.SaveState(); err != nil {
+						a.status = "Error guardando estado: " + err.Error()
+					} else {
+						_ = a.saveSettings()
+						a.status = "Estado guardado"
+					}
+				}
+			})
+			ui.Box(c).Height(10)
+			ui.Text(c, "Integración Last.fm").FontSize(18).FontWeight(700).TextColor(sonoraText)
+			ui.TextInput(c, &a.lastfmUsername).Label("Usuario").Width(640)
+			ui.TextInput(c, &a.lastfmAPIKey).Label("API key").Width(640)
+			ui.TextInput(c, &a.lastfmAPISecret).Label("Shared secret").Width(640)
+			ui.TextInput(c, &a.lastfmSessionKey).Label("Session key").Width(640)
+			ui.Row(c).Gap(10).Children(func() {
+				if ui.Button(c, "Guardar credenciales Last.fm").Clicked() {
+					a.refreshLastFMClient()
+					if err := a.saveSettings(); err != nil {
+						a.status = "No se guardaron credenciales Last.fm: " + err.Error()
+					} else {
+						a.status = "Credenciales Last.fm guardadas"
+					}
+				}
+				if ui.PrimaryButton(c, "Conectar Last.fm automáticamente").Disabled(a.lastfmAuthBusy).Clicked() {
+					a.startLastFMAutoConnect()
+				}
+			})
+			if a.lastfm != nil && a.lastfm.Enabled() {
+				ui.Text(c, "Last.fm activo para now playing y scrobble").TextColor(sonoraTertiary)
+			} else {
+				ui.Text(c, "Last.fm parcial: falta session key para scrobble/now playing").TextColor(sonoraTextMuted)
+			}
+			ui.Text(c, a.status).TextColor(sonoraTextMuted)
+		})
+}
+
+func (a *app) indexLibrary() {
+	if err := a.store.Index(a.rootInput); err != nil {
+		a.status = "Error indexando: " + err.Error()
+		return
+	}
+	a.covers = map[string]*ui.Bitmap{}
+	a.coverLRU = nil
+	a.status = fmt.Sprintf("Indexadas %d canciones", len(a.store.Songs))
+	if len(a.store.Songs) > 0 {
+		a.selectedID = a.store.Songs[0].ID
+	}
+	a.persistAll()
 }
 
 func (a *app) viewHero(c *ui.Context) {
@@ -432,23 +670,30 @@ func (a *app) viewHero(c *ui.Context) {
 		Border(1, sonoraBorder).
 		Radius(14).
 		Children(func() {
-			ui.Box(c).Size(140, 140).Background(ui.RGBA(244, 63, 94, 0.22)).Radius(12).Children(func() {
+			ui.Box(c).Size(280, 220).Background(ui.RGBA(244, 63, 94, 0.16)).Radius(12).Children(func() {
+				if hasSelected {
+					if bmp := a.coverBitmap(selectedSong); bmp != nil {
+						ui.Image(c, bmp).Fill().Fit(ui.Cover).Radius(12)
+						return
+					}
+				}
 				ui.Column(c).Fill().Center().Children(func() {
-					ui.Text(c, "MUSAIK").FontSize(12).FontWeight(700).TextColor(sonoraText)
+					ui.Text(c, "MUSAIK").FontSize(16).FontWeight(700).TextColor(sonoraText)
 				})
 			})
 			ui.Column(c).Grow(1).Gap(8).Children(func() {
 				ui.Row(c).Gap(8).Children(func() {
 					ui.Text(c, "ÁLBUM DEL DÍA").FontSize(11).FontWeight(600).TextColor(sonoraTextMuted)
 					ui.Text(c, "24-BIT / 96KHZ FLAC").FontSize(11).Font("monospace").TextColor(sonoraTertiary)
+					ui.Text(c, "MASTER DIRECTO").FontSize(11).TextColor(sonoraTextTertiary)
 				})
-				ui.Text(c, title).FontSize(42).FontWeight(700).TextColor(sonoraText)
+				ui.Text(c, title).FontSize(52).FontWeight(700).TextColor(sonoraText)
 				ui.Text(c, subtitle).FontSize(14).TextColor(sonoraTextMuted)
 				ui.Row(c).Gap(10).Children(func() {
-					if ui.PrimaryButton(c, "▶ Reproducir").Clicked() {
+					if ui.PrimaryButton(c, "▶ Reproducir Álbum").Clicked() {
 						a.playSelectedOrFirst()
 					}
-					if ui.Button(c, "↺ Aleatorio").Clicked() {
+					if ui.Button(c, "⤮ Aleatorio").Clicked() {
 						a.shuffle = !a.shuffle
 					}
 					if hasSelected && ui.Button(c, "♡ Like").Clicked() {
@@ -474,6 +719,78 @@ func (a *app) filteredSongs(in []model.Song) []model.Song {
 		}
 	}
 	return out
+}
+
+func (a *app) albumRepresentativeSongs() []model.Song {
+	out := make([]model.Song, 0, 24)
+	seen := map[string]bool{}
+	songs := a.filteredSongs(a.store.Songs)
+	for _, s := range songs {
+		k := strings.ToLower(strings.TrimSpace(s.Artist + "||" + s.Album))
+		if k == "||" {
+			k = s.ID
+		}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, s)
+		if len(out) >= 24 {
+			break
+		}
+	}
+	return out
+}
+
+func (a *app) viewAlbumStrip(c *ui.Context, albums []model.Song, limit int) {
+	if len(albums) == 0 {
+		return
+	}
+	if limit > len(albums) {
+		limit = len(albums)
+	}
+	ui.Row(c).Gap(12).Children(func() {
+		for i := 0; i < limit; i++ {
+			s := albums[i]
+			ui.Column(c).Width(170).Gap(6).Children(func() {
+				ui.Box(c).Size(170, 170).Radius(10).Background(ui.RGBA(255, 255, 255, 0.06)).Children(func() {
+					if bmp := a.coverBitmap(s); bmp != nil {
+						ui.Image(c, bmp).Fill().Fit(ui.Cover).Radius(10)
+					}
+				})
+				ui.Text(c, s.Album).SingleLine().TextColor(sonoraText)
+				ui.Text(c, s.Artist).SingleLine().TextColor(sonoraTextMuted)
+				ui.Text(c, strings.ToUpper(s.Format)).Font("monospace").FontSize(11).TextColor(sonoraTertiary)
+			})
+		}
+	})
+}
+
+func (a *app) viewHiResRows(c *ui.Context, albums []model.Song, limit int) {
+	if len(albums) == 0 {
+		return
+	}
+	if limit > len(albums) {
+		limit = len(albums)
+	}
+	ui.Row(c).Gap(12).Children(func() {
+		for i := 0; i < limit; i++ {
+			s := albums[i]
+			ui.Row(c).Grow(1).Padding(10, 10).Gap(10).Background(ui.RGBA(255, 255, 255, 0.04)).Border(1, sonoraBorder).Radius(12).Children(func() {
+				ui.Box(c).Size(84, 84).Radius(8).Background(ui.RGBA(255, 255, 255, 0.06)).Children(func() {
+					if bmp := a.coverBitmap(s); bmp != nil {
+						ui.Image(c, bmp).Fill().Fit(ui.Cover).Radius(8)
+					}
+				})
+				ui.Column(c).Grow(1).Gap(4).Children(func() {
+					ui.Text(c, s.Album).SingleLine().TextColor(sonoraText)
+					ui.Text(c, s.Artist).SingleLine().TextColor(sonoraTextMuted)
+					ui.Text(c, "HI-RES / LOSSLESS").Font("monospace").FontSize(11).TextColor(sonoraTertiary)
+				})
+				ui.Button(c, "▶").Width(34)
+			})
+		}
+	})
 }
 
 func (a *app) viewSongs(c *ui.Context, songs []model.Song) {
