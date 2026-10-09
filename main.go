@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -64,6 +65,14 @@ type app struct {
 	repeat      bool
 }
 
+type appSettings struct {
+	Section     string `json:"section"`
+	Shuffle     bool   `json:"shuffle"`
+	Repeat      bool   `json:"repeat"`
+	RootInput   string `json:"root_input"`
+	SearchQuery string `json:"search_query"`
+}
+
 func newApp() *app {
 	a := &app{
 		store:       library.NewStore(),
@@ -84,6 +93,16 @@ func newApp() *app {
 		),
 	}
 	_ = a.store.LoadState()
+	if a.store.Root != "" {
+		a.rootInput = a.store.Root
+	}
+	_ = a.loadSettings()
+	if a.rootInput == "" {
+		a.rootInput = defaultMusicDir()
+	}
+	if len(a.store.Songs) > 0 {
+		a.status = fmt.Sprintf("Biblioteca cargada: %d canciones", len(a.store.Songs))
+	}
 	return a
 }
 
@@ -93,6 +112,71 @@ func defaultMusicDir() string {
 		return "."
 	}
 	return filepath.Join(home, "Music")
+}
+
+func settingsPath() (string, error) {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(base, "musaik")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "settings.json"), nil
+}
+
+func (a *app) saveSettings() error {
+	path, err := settingsPath()
+	if err != nil {
+		return err
+	}
+	s := appSettings{
+		Section:     string(a.section),
+		Shuffle:     a.shuffle,
+		Repeat:      a.repeat,
+		RootInput:   a.rootInput,
+		SearchQuery: a.searchQuery,
+	}
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+func (a *app) loadSettings() error {
+	path, err := settingsPath()
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var s appSettings
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	switch section(s.Section) {
+	case sectionLibrary, sectionArtists, sectionAlbums, sectionFavorites, sectionPlaylists:
+		a.section = section(s.Section)
+	}
+	a.shuffle = s.Shuffle
+	a.repeat = s.Repeat
+	if s.RootInput != "" {
+		a.rootInput = s.RootInput
+	}
+	a.searchQuery = s.SearchQuery
+	return nil
+}
+
+func (a *app) persistAll() {
+	_ = a.store.SaveState()
+	_ = a.saveSettings()
 }
 
 func (a *app) view(c *ui.Context) {
@@ -149,6 +233,7 @@ func (a *app) viewTopBar(c *ui.Context) {
 			if strings.TrimSpace(a.searchQuery) != "" {
 				if ui.Button(c, "Limpiar").Clicked() {
 					a.searchQuery = ""
+					_ = a.saveSettings()
 				}
 			}
 			ui.Spacer(c)
@@ -178,12 +263,14 @@ func (a *app) viewSidebar(c *ui.Context) {
 					if len(a.store.Songs) > 0 {
 						a.selectedID = a.store.Songs[0].ID
 					}
+					a.persistAll()
 				}
 			}
 			if ui.Button(c, "Guardar estado").Width(220).Clicked() {
 				if err := a.store.SaveState(); err != nil {
 					a.status = "Error guardando estado: " + err.Error()
 				} else {
+					_ = a.saveSettings()
 					a.status = "Estado guardado"
 				}
 			}
@@ -209,6 +296,7 @@ func (a *app) sidebarNavButton(c *ui.Context, sec section, label string) {
 	}
 	if btn.Clicked() {
 		a.section = sec
+		_ = a.saveSettings()
 	}
 }
 
@@ -317,6 +405,7 @@ func (a *app) viewMain(c *ui.Context) {
 						FavoritesOnly: true,
 					})
 					a.status = "Playlist dinámica creada"
+					_ = a.store.SaveState()
 				}
 			})
 		}
@@ -364,6 +453,7 @@ func (a *app) viewHero(c *ui.Context) {
 					}
 					if hasSelected && ui.Button(c, "♡ Like").Clicked() {
 						a.store.ToggleFavorite(selectedSong.ID)
+						_ = a.store.SaveState()
 					}
 				})
 			})
@@ -466,6 +556,7 @@ func (a *app) viewSongs(c *ui.Context, songs []model.Song) {
 					}
 					if ui.Button(c, icon).Width(36).Clicked() {
 						a.store.ToggleFavorite(s.ID)
+						_ = a.store.SaveState()
 					}
 				}
 			}).Grow(1)
@@ -581,6 +672,7 @@ func (a *app) viewControls(c *ui.Context) {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				if ui.Button(c, "⇄").Clicked() {
 					a.shuffle = !a.shuffle
+					_ = a.saveSettings()
 				}
 				if ui.Button(c, "⏮").Clicked() {
 					a.playPrevious()
@@ -603,6 +695,7 @@ func (a *app) viewControls(c *ui.Context) {
 				}
 				if ui.Button(c, "↻").Clicked() {
 					a.repeat = !a.repeat
+					_ = a.saveSettings()
 				}
 				ui.Spacer(c)
 				ui.Textf(c, "shuffle %t", a.shuffle).FontSize(11).TextColor(sonoraTextTertiary)
@@ -772,6 +865,13 @@ func main() {
 			Content:   ui.View(a.view),
 		})
 		a.window = win
+		win.OnClose(func(e *mygo.CloseEvent) {
+			a.player.Stop()
+			a.persistAll()
+		})
+		win.OnClosed(func() {
+			a.player.Stop()
+		})
 		a.startUIHeartbeat()
 	})
 	if err := mygo.App.Run(); err != nil {

@@ -142,6 +142,8 @@ func mapToSortedSlice(set map[string]struct{}) []string {
 type persistedState struct {
 	Favorites map[string]bool  `json:"favorites"`
 	Playlists []model.Playlist `json:"playlists"`
+	Root      string           `json:"root"`
+	Songs     []model.Song     `json:"songs"`
 }
 
 func StatePath() (string, error) {
@@ -164,6 +166,8 @@ func (s *Store) SaveState() error {
 	p := persistedState{
 		Favorites: s.Favorites,
 		Playlists: s.Playlists,
+		Root:      s.Root,
+		Songs:     s.Songs,
 	}
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
@@ -196,6 +200,13 @@ func (s *Store) LoadState() error {
 	}
 	if len(p.Playlists) > 0 {
 		s.Playlists = p.Playlists
+	}
+	if p.Root != "" {
+		s.Root = p.Root
+	}
+	if len(p.Songs) > 0 {
+		s.Songs = p.Songs
+		s.rebuildIndexes()
 	}
 	return nil
 }

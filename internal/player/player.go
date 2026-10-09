@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -38,6 +38,7 @@ type Player struct {
 	mu          sync.Mutex
 	cmd         *exec.Cmd
 	cancel      context.CancelFunc
+	controlIn   io.WriteCloser
 	nowPath     string
 	isPaused    bool
 	lastError   error
@@ -80,7 +81,7 @@ func (p *Player) PlayFrom(path string, knownDuration time.Duration, offset time.
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd, err := startBackend(ctx, path, offset, p.disableExec)
+	cmd, controlIn, err := startBackend(ctx, path, offset, p.disableExec)
 	if err != nil {
 		cancel()
 		p.lastError = err
@@ -88,6 +89,7 @@ func (p *Player) PlayFrom(path string, knownDuration time.Duration, offset time.
 	}
 	p.cmd = cmd
 	p.cancel = cancel
+	p.controlIn = controlIn
 	p.nowPath = path
 	p.isPaused = false
 	p.duration = knownDuration
@@ -108,28 +110,38 @@ func (p *Player) TogglePause() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.cmd == nil || p.cmd.Process == nil {
+	if p.nowPath == "" {
 		return errors.New("nothing is playing")
 	}
 
-	var sig syscall.Signal
 	if p.isPaused {
-		sig = syscall.SIGCONT
-	} else {
-		sig = syscall.SIGSTOP
-	}
-	if err := p.cmd.Process.Signal(sig); err != nil {
-		p.lastError = fmt.Errorf("toggling pause: %w", err)
-		return p.lastError
-	}
-	if p.isPaused {
-		p.pauseAccum += p.clockNow().Sub(p.pausedAt)
+		ctx, cancel := context.WithCancel(context.Background())
+		cmd, controlIn, err := startBackend(ctx, p.nowPath, p.seekBase, p.disableExec)
+		if err != nil {
+			cancel()
+			p.lastError = err
+			return err
+		}
+		p.cmd = cmd
+		p.cancel = cancel
+		p.controlIn = controlIn
+		p.startedAt = p.clockNow()
+		p.pauseAccum = 0
 		p.pausedAt = time.Time{}
 		p.isPaused = false
-	} else {
-		p.pausedAt = p.clockNow()
-		p.isPaused = true
+		p.generation++
+		gen := p.generation
+		go p.waitForTrackEnd(cmd, cancel, p.nowPath, gen)
+		return nil
 	}
+
+	if p.cmd == nil || p.cmd.Process == nil {
+		p.lastError = errors.New("nothing is playing")
+		return p.lastError
+	}
+	p.seekBase = p.positionLocked()
+	p.stopProcessKeepTrackLocked()
+	p.isPaused = true
 	return nil
 }
 
@@ -147,12 +159,35 @@ func (p *Player) stopLocked() {
 	if p.cmd != nil && p.cmd.Process != nil {
 		_ = p.cmd.Process.Kill()
 	}
+	if p.controlIn != nil {
+		_ = p.controlIn.Close()
+	}
 	p.cmd = nil
 	p.cancel = nil
+	p.controlIn = nil
 	p.nowPath = ""
 	p.isPaused = false
 	p.duration = 0
 	p.seekBase = 0
+	p.startedAt = time.Time{}
+	p.pausedAt = time.Time{}
+	p.pauseAccum = 0
+}
+
+func (p *Player) stopProcessKeepTrackLocked() {
+	p.generation++
+	if p.cancel != nil {
+		p.cancel()
+	}
+	if p.cmd != nil && p.cmd.Process != nil {
+		_ = p.cmd.Process.Kill()
+	}
+	if p.controlIn != nil {
+		_ = p.controlIn.Close()
+	}
+	p.cmd = nil
+	p.cancel = nil
+	p.controlIn = nil
 	p.startedAt = time.Time{}
 	p.pausedAt = time.Time{}
 	p.pauseAccum = 0
@@ -182,7 +217,7 @@ func (p *Player) State() State {
 
 	st := State{
 		Path:     p.nowPath,
-		Playing:  p.cmd != nil && p.nowPath != "",
+		Playing:  p.nowPath != "",
 		Paused:   p.isPaused,
 		Duration: p.duration,
 	}
@@ -203,14 +238,17 @@ func (p *Player) SeekTo(pos time.Duration) error {
 	if p.duration > 0 && pos > p.duration {
 		pos = p.duration
 	}
+	if p.isPaused && (p.cmd == nil || p.cmd.Process == nil) {
+		p.seekBase = pos
+		return nil
+	}
 
 	path := p.nowPath
 	duration := p.duration
-	wasPaused := p.isPaused
-	p.stopLocked()
+	p.stopProcessKeepTrackLocked()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd, err := startBackend(ctx, path, pos, p.disableExec)
+	cmd, controlIn, err := startBackend(ctx, path, pos, p.disableExec)
 	if err != nil {
 		cancel()
 		p.lastError = err
@@ -219,6 +257,7 @@ func (p *Player) SeekTo(pos time.Duration) error {
 
 	p.cmd = cmd
 	p.cancel = cancel
+	p.controlIn = controlIn
 	p.nowPath = path
 	p.isPaused = false
 	p.duration = duration
@@ -230,15 +269,6 @@ func (p *Player) SeekTo(pos time.Duration) error {
 	p.generation++
 	gen := p.generation
 	go p.waitForTrackEnd(cmd, cancel, path, gen)
-
-	if wasPaused {
-		if err := cmd.Process.Signal(syscall.SIGSTOP); err != nil {
-			p.lastError = fmt.Errorf("pausing after seek: %w", err)
-			return p.lastError
-		}
-		p.isPaused = true
-		p.pausedAt = p.clockNow()
-	}
 	return nil
 }
 
@@ -257,6 +287,7 @@ func (p *Player) waitForTrackEnd(cmd *exec.Cmd, cancel context.CancelFunc, path 
 	}
 	p.cmd = nil
 	p.cancel = nil
+	p.controlIn = nil
 	p.isPaused = false
 	p.pausedAt = time.Time{}
 	p.pauseAccum = 0
@@ -298,10 +329,10 @@ func (p *Player) positionLocked() time.Duration {
 	return pos
 }
 
-func startBackend(ctx context.Context, path string, offset time.Duration, disableExec bool) (*exec.Cmd, error) {
+func startBackend(ctx context.Context, path string, offset time.Duration, disableExec bool) (*exec.Cmd, io.WriteCloser, error) {
 	bin, err := findExecutable("ffplay")
 	if err != nil {
-		return nil, errors.New("ffplay no está disponible (instala ffmpeg)")
+		return nil, nil, errors.New("ffplay no está disponible (instala ffmpeg)")
 	}
 	offsetSec := strconv.FormatFloat(offset.Seconds(), 'f', 3, 64)
 	args := []string{
@@ -312,13 +343,18 @@ func startBackend(ctx context.Context, path string, offset time.Duration, disabl
 		path,
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
+	stdin, stdinErr := cmd.StdinPipe()
+	if stdinErr != nil {
+		return nil, nil, fmt.Errorf("opening ffplay stdin: %w", stdinErr)
+	}
 	if disableExec {
-		return cmd, nil
+		return cmd, stdin, nil
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("starting ffplay: %w", err)
+		_ = stdin.Close()
+		return nil, nil, fmt.Errorf("starting ffplay: %w", err)
 	}
-	return cmd, nil
+	return cmd, stdin, nil
 }
 
 func probeDuration(path string) time.Duration {
