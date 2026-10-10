@@ -1,0 +1,10 @@
+/Users/fvelasquez/Developer/MacApps/Musaik/musaik-rs/target/debug/deps/xattr-bf46c9bdd5d62437.d: /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/lib.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/error.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/sys/mod.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/util.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/sys/linux_macos/mod.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/sys/linux_macos/macos.rs
+
+/Users/fvelasquez/Developer/MacApps/Musaik/musaik-rs/target/debug/deps/libxattr-bf46c9bdd5d62437.rmeta: /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/lib.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/error.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/sys/mod.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/util.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/sys/linux_macos/mod.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/sys/linux_macos/macos.rs
+
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/lib.rs:
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/error.rs:
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/sys/mod.rs:
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/util.rs:
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/sys/linux_macos/mod.rs:
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-0.2.3/src/sys/linux_macos/macos.rs:

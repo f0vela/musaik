@@ -1,0 +1,14 @@
+/Users/fvelasquez/Developer/MacApps/Musaik/musaik-rs/target/debug/deps/thiserror-b25400a87c814318.d: /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/lib.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/aserror.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/display.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/var.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/private.rs /Users/fvelasquez/Developer/MacApps/Musaik/musaik-rs/target/debug/build/thiserror-61816da21528297c/out/private.rs
+
+/Users/fvelasquez/Developer/MacApps/Musaik/musaik-rs/target/debug/deps/libthiserror-b25400a87c814318.rlib: /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/lib.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/aserror.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/display.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/var.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/private.rs /Users/fvelasquez/Developer/MacApps/Musaik/musaik-rs/target/debug/build/thiserror-61816da21528297c/out/private.rs
+
+/Users/fvelasquez/Developer/MacApps/Musaik/musaik-rs/target/debug/deps/libthiserror-b25400a87c814318.rmeta: /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/lib.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/aserror.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/display.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/var.rs /Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/private.rs /Users/fvelasquez/Developer/MacApps/Musaik/musaik-rs/target/debug/build/thiserror-61816da21528297c/out/private.rs
+
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/lib.rs:
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/aserror.rs:
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/display.rs:
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/var.rs:
+/Users/fvelasquez/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.21/src/private.rs:
+/Users/fvelasquez/Developer/MacApps/Musaik/musaik-rs/target/debug/build/thiserror-61816da21528297c/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/fvelasquez/Developer/MacApps/Musaik/musaik-rs/target/debug/build/thiserror-61816da21528297c/out
