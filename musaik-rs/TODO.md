@@ -17,7 +17,7 @@
 - [~] Vista Artistas (detalle por álbum/canciones en scaffold textual; falta layout final/carátulas)
 - [~] Vista Álbumes en grid (lista scaffold; falta grid final con covers)
 - [~] Ajustes (acciones base indexar/guardar/iPod; faltan formularios completos Last.fm/iPod)
-- [ ] Barra de reproducción con now playing y controles
+- [~] Barra de reproducción con now playing y controles (footer now-playing + estado; faltan botones pixel-perfect finales)
 - [x] Lógica de secciones/filtros en `AppState` (sin wiring UI final)
 
 ## Fase 3 - Interacciones avanzadas
@@ -25,9 +25,9 @@
 - [x] Action Bar `Cmd+P` (lógica de hits: artista/canción/álbum)
 - [x] Action Bar acciones rápidas en `AppState` (play/pause/next/previous/stop/settings/quit)
 - [x] Navegación next/previous en estado con soporte shuffle/repeat
-- [~] Wiring UI real de Action Bar en GPUI (lista de hits clickeable visible; falta overlay Cmd+P y input)
+- [~] Wiring UI real de Action Bar en GPUI (overlay flotante Cmd+P + navegación teclado/click listos; falta input de texto real)
 - [ ] Menú contextual canciones (agregar playlist + sync playcount Last.fm)
-- [ ] Enviar like a Last.fm al marcar favorito
+- [x] Enviar like a Last.fm al marcar favorito
 
 ## Fase 4 - Hardening
 

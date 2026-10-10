@@ -18,7 +18,11 @@ actions!(
         ActionBarSelectNext,
         ActionBarSelectPrev,
         ActionBarRunSelected,
-        ActionBarClose
+        ActionBarClose,
+        QuickPlayPause,
+        QuickNext,
+        QuickPrevious,
+        QuickStop
     ]
 );
 
@@ -123,6 +127,26 @@ impl RootView {
     ) {
         self.action_bar_open = false;
     }
+
+    fn quick_play_pause(&mut self, _: &QuickPlayPause, _window: &mut Window, _cx: &mut Context<Self>) {
+        if self.state.player.state.playing {
+            self.state.apply_quick_action("pause");
+        } else {
+            self.state.apply_quick_action("play");
+        }
+    }
+
+    fn quick_next(&mut self, _: &QuickNext, _window: &mut Window, _cx: &mut Context<Self>) {
+        self.state.apply_quick_action("next");
+    }
+
+    fn quick_previous(&mut self, _: &QuickPrevious, _window: &mut Window, _cx: &mut Context<Self>) {
+        self.state.apply_quick_action("previous");
+    }
+
+    fn quick_stop(&mut self, _: &QuickStop, _window: &mut Window, _cx: &mut Context<Self>) {
+        self.state.apply_quick_action("stop");
+    }
 }
 
 impl Render for RootView {
@@ -215,6 +239,10 @@ impl Render for RootView {
             .on_action(cx.listener(Self::action_bar_select_prev))
             .on_action(cx.listener(Self::action_bar_run_selected))
             .on_action(cx.listener(Self::action_bar_close))
+            .on_action(cx.listener(Self::quick_play_pause))
+            .on_action(cx.listener(Self::quick_next))
+            .on_action(cx.listener(Self::quick_previous))
+            .on_action(cx.listener(Self::quick_stop))
             .relative()
             .size_full()
             .flex()
@@ -710,52 +738,199 @@ impl Render for RootView {
                                     )
                             } else {
                                 div()
-                            })
-                            .child(
-                                div()
-                                    .mt(px(14.))
-                                    .text_sm()
-                                    .text_color(gpui::rgb(0xCBD5E1))
-                                    .child(format!("Action hits (Cmd+P base lógica): {}", action_hits.len())),
-                            )
-                            .child(
-                                div().children(
-                                    action_hits
-                                        .iter()
-                                        .take(12)
-                                        .enumerate()
-                                        .map(|(idx, hit)| {
-                                            let hit_copy = hit.clone();
-                                            div()
-                                                .id(("action-hit", idx))
-                                                .mt(px(3.))
-                                                .px_2()
-                                                .py_1()
-                                                .rounded_sm()
-                                                .bg(gpui::rgb(0x1E2430))
-                                                .child(format!("{} — {}", hit.title, hit.subtitle))
-                                                .on_click(cx.listener(move |this, _, _, _| {
-                                                    this.state.apply_action_hit(&hit_copy);
-                                                }))
-                                        })
-                                        .collect::<Vec<_>>(),
-                                ),
-                            ),
+                            }),
                     ),
             )
             .child(
                 div()
-                    .mt(px(18.))
-                    .text_sm()
-                    .text_color(gpui::rgb(0xCBD5E1))
-                    .child("Base lista: modelos, store, settings, player shell, Last.fm, iPod y lógica de vistas/Action Bar."),
+                    .mt(px(16.))
+                    .px_3()
+                    .py_2()
+                    .rounded_lg()
+                    .bg(gpui::rgb(0x181C25))
+                    .flex()
+                    .justify_between()
+                    .items_center()
+                    .child(
+                        div()
+                            .child(if let Some(song) = current_song.clone() {
+                                format!("♪ {} — {}", song.artist, song.title)
+                            } else {
+                                "♪ Nada en reproducción".to_string()
+                            })
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(gpui::rgb(0x94A3B8))
+                                    .child("Cmd+P: action bar · ↑/↓: navegar · Enter: ejecutar · Esc: cerrar"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(gpui::rgb(0xCBD5E1))
+                            .child(format!(
+                                "Estado: {}",
+                                if self.state.player.state.playing {
+                                    if self.state.player.state.paused {
+                                        "Pausado"
+                                    } else {
+                                        "Reproduciendo"
+                                    }
+                                } else {
+                                    "Detenido"
+                                }
+                            )),
+                    ),
             )
+            .child(if self.action_bar_open {
+                div()
+                    .absolute()
+                    .top(px(72.))
+                    .left(px(280.))
+                    .w(px(620.))
+                    .px_3()
+                    .py_3()
+                    .rounded_lg()
+                    .bg(gpui::rgb(0x1A202B))
+                    .border_1()
+                    .border_color(gpui::rgb(0x334155))
+                    .shadow_lg()
+                    .child(div().text_sm().child("Action Bar"))
+                    .child(
+                        div()
+                            .mt(px(3.))
+                            .text_xs()
+                            .text_color(gpui::rgb(0x94A3B8))
+                            .child(format!(
+                                "Filtro: {}",
+                                if self.state.action_query.is_empty() {
+                                    "all"
+                                } else {
+                                    self.state.action_query.as_str()
+                                }
+                            )),
+                    )
+                    .child(
+                        div()
+                            .mt(px(4.))
+                            .flex()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .id("ab-all")
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .bg(gpui::rgb(0x273042))
+                                    .child("all")
+                                    .on_click(cx.listener(|this, _, _, _| {
+                                        this.state.action_query.clear();
+                                        this.action_selected_idx = 0;
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .id("ab-action")
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .bg(gpui::rgb(0x273042))
+                                    .child("action:")
+                                    .on_click(cx.listener(|this, _, _, _| {
+                                        this.state.action_query = "action:".into();
+                                        this.action_selected_idx = 0;
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .id("ab-artist")
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .bg(gpui::rgb(0x273042))
+                                    .child("artist:")
+                                    .on_click(cx.listener(|this, _, _, _| {
+                                        this.state.action_query = "artist:".into();
+                                        this.action_selected_idx = 0;
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .id("ab-album")
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .bg(gpui::rgb(0x273042))
+                                    .child("album:")
+                                    .on_click(cx.listener(|this, _, _, _| {
+                                        this.state.action_query = "album:".into();
+                                        this.action_selected_idx = 0;
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .id("ab-song")
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .bg(gpui::rgb(0x273042))
+                                    .child("song:")
+                                    .on_click(cx.listener(|this, _, _, _| {
+                                        this.state.action_query = "song:".into();
+                                        this.action_selected_idx = 0;
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div().children(
+                            action_hits
+                                .iter()
+                                .take(12)
+                                .enumerate()
+                                .map(|(idx, hit)| {
+                                    let hit_copy = hit.clone();
+                                    let selected = idx == self.action_selected_idx;
+                                    div()
+                                        .id(("action-hit", idx))
+                                        .mt(px(3.))
+                                        .px_2()
+                                        .py_1()
+                                        .rounded_sm()
+                                        .bg(if selected {
+                                            gpui::rgb(0x3A2430)
+                                        } else {
+                                            gpui::rgb(0x1E2430)
+                                        })
+                                        .child(format!("{} — {}", hit.title, hit.subtitle))
+                                        .on_click(cx.listener(move |this, _, _, _| {
+                                            this.state.apply_action_hit(&hit_copy);
+                                            this.action_bar_open = false;
+                                        }))
+                                })
+                                .collect::<Vec<_>>(),
+                        ),
+                    )
+            } else {
+                div()
+            })
     }
 }
 
 fn main() {
     Application::new().run(|cx: &mut App| {
         let bounds = Bounds::centered(None, gpui::size(px(1100.), px(780.)), cx);
+        cx.bind_keys([
+            KeyBinding::new("cmd-p", ToggleActionBar, Some("MusaikRS")),
+            KeyBinding::new("escape", ActionBarClose, Some("MusaikRS")),
+            KeyBinding::new("down", ActionBarSelectNext, Some("MusaikRS")),
+            KeyBinding::new("up", ActionBarSelectPrev, Some("MusaikRS")),
+            KeyBinding::new("enter", ActionBarRunSelected, Some("MusaikRS")),
+            KeyBinding::new("space", QuickPlayPause, Some("MusaikRS")),
+            KeyBinding::new("cmd-right", QuickNext, Some("MusaikRS")),
+            KeyBinding::new("cmd-left", QuickPrevious, Some("MusaikRS")),
+            KeyBinding::new("cmd-.", QuickStop, Some("MusaikRS")),
+        ]);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -766,7 +941,13 @@ fn main() {
                 }),
                 ..Default::default()
             },
-            |_window, cx| cx.new(|_cx| RootView::new()),
+            |window, cx| {
+                cx.new(|cx| {
+                    let view = RootView::new(cx);
+                    view.focus_handle.focus(window);
+                    view
+                })
+            },
         )
         .expect("open window");
     });
