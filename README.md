@@ -1,32 +1,42 @@
 # Musaik
 
-Musaik es una app de escritorio **nativa para macOS** (Go + Mygo UI nativa) para gestionar y reproducir música local.
+Musaik es una app de escritorio **nativa para macOS** (Go + Mygo UI nativa) para gestionar y reproducir música local con enfoque visual tipo Sonora/screen reference.
 
-## Estado actual del proyecto
+## Estado actual
 
-Actualmente existe un MVP funcional con:
+Implementado y funcional:
 
-- Indexado recursivo de carpetas para: `mp3`, `mp4`, `flac`, `ogg`.
-- Vistas principales:
-  - **Librería** (todas las canciones indexadas)
-  - **Artistas**
-  - **Álbumes**
+- Indexado recursivo de carpetas para `mp3`, `mp4`, `flac`, `ogg`.
+- Persistencia local de biblioteca y ajustes:
+  - `state.json`: canciones indexadas, favoritos, playlists.
+  - `settings.json`: sección activa, búsqueda, shuffle/repeat, Last.fm, iPod.
+- Vistas:
+  - **Explorar**
+  - **Canciones/Librería** (tabla con carátulas, número de track, plays, formato, duración, like)
+  - **Artistas** (detalle por artista agrupado por álbum, con carátula por álbum y canciones)
+  - **Álbumes** (grid)
   - **Favoritos**
-  - **Playlists** (manuales y dinámicas/smart)
-- Controles base de reproducción:
-  - previous, play/pause, next
-  - repeat, shuffle, like
-- Barra de progreso con tiempo actual/total y seek directo en UI.
-- Persistencia local de estado (favoritos y playlists).
-- Integración base con Last.fm:
+  - **Playlists**
+  - **Ajustes**
+- Reproducción:
+  - previous / play-pause / next
+  - shuffle / repeat
+  - seek y barra de progreso
+  - now playing en barra inferior (carátula + título + artista/álbum)
+  - stop correcto al cerrar app
+- Last.fm:
+  - auth desde UI (flujo automático con callback local)
   - update now playing
   - scrobble
-  - like (`track.love`) al marcar favoritos en la app
-  - consulta de `userplaycount` por canción
-  - conexión automática desde Ajustes para obtener y guardar `session_key`
-- Integración iPod Classic (modo disco):
-  - detección automática en `/Volumes`
-  - exportación de playlist al iPod (copiado de archivos + `.m3u8`)
+  - like remoto (`track.love`) al dar like local
+  - sync manual de playcount por canción (`track.getInfo`)
+- iPod Classic (modo disco):
+  - detección en `/Volumes`
+  - sync de playlist (copia de archivos + `.m3u8`)
+- Action Bar:
+  - `Cmd+P` abre barra flotante
+  - búsqueda de artista / canción / álbum
+  - acciones rápidas: play, pause, next, previous, settings, stop, quit
 
 ## Requisitos
 
@@ -60,6 +70,12 @@ go test ./internal/library -run TestSmartPlaylistFavoritesFilter -v
 ```bash
 go tool mygo build
 ```
+
+## Documento de especificación
+
+Para porting del proyecto a otro lenguaje/framework, ver:
+
+- [`PROJECT-SPECS.md`](./PROJECT-SPECS.md)
 
 ## Last.fm
 

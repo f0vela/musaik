@@ -1,46 +1,51 @@
-# TODO - Musaik (Roadmap por fases)
+# TODO - Musaik (estado actual + próximos pasos)
 
-## Fase v0.2 - Reproducción sólida + UX básica
+## Hecho
 
-Objetivo: convertir el MVP en un player usable día a día.
+- [x] Reproducción estable con `ffplay` + `ffprobe` (play/pause/resume/next/prev/seek/progress).
+- [x] Guardado de estado de biblioteca y preferencias (`state.json` + `settings.json`).
+- [x] Corrección de cierre de app (detener audio al cerrar).
+- [x] UI base alineada con diseño de referencia (sidebar/topbar/playerbar).
+- [x] Tabla de canciones con:
+  - [x] número de track desde metadata
+  - [x] plays locales
+  - [x] like
+  - [x] carátula de álbum (sin repetición en filas del mismo álbum)
+- [x] Optimización de memoria de carátulas (downscale + caché LRU reducida).
+- [x] Menú contextual en canciones:
+  - [x] agregar a playlist
+  - [x] actualizar playcount desde Last.fm (si conectado)
+- [x] Last.fm completo para uso diario:
+  - [x] auth automática en Ajustes
+  - [x] now playing + scrobble
+  - [x] enviar like a Last.fm
+- [x] Vista Artistas avanzada (click artista -> canciones por álbum con carátula por álbum).
+- [x] Action Bar (`Cmd+P`) flotante con:
+  - [x] búsqueda de artista/canción/álbum
+  - [x] acciones play/pause/next/previous/stop/settings/quit
+- [x] iPod Classic modo disco:
+  - [x] detección en `/Volumes`
+  - [x] exportación de playlist a `.m3u8` y copia de audio
 
-- [x] Reemplazar backend de reproducción básico (`afplay/ffplay`) por un motor con mejor control de estado, progreso y seek.
-- [x] Implementar barra de progreso real de reproducción con tiempo actual / tiempo total.
-- [x] Implementar **seek** real (arrastrar barra para adelantar/retroceder pista).
-- [x] Sincronizar de forma confiable eventos de reproducción (play/pause/stop/track end) para actualizar UI en tiempo real.
-- [x] Añadir indicador visual claro de canción en reproducción y estado de pausa.
-- [x] Añadir tests unitarios para módulo de reproducción (estado, cola, navegación).
+## Pendiente prioritario (v0.6)
 
-## Fase v0.3 - Librería navegable + playlists útiles
+- [ ] Sync iPod Classic con `iTunesDB` real (no solo `.m3u8`) para compatibilidad total con firmware stock.
+- [ ] Crear/editar/eliminar playlists manuales completamente desde UI (pantalla dedicada).
+- [ ] Añadir acción “agregar a playlist nueva…” desde menú contextual.
+- [ ] Mejorar scrobble: enviar solo al cumplir umbral (ej. 50% o 4 min).
+- [ ] Mostrar indicador visual de estado Last.fm (conectado/error/pendiente) en topbar o settings.
 
-Objetivo: mejorar exploración y organización musical.
+## Pendiente técnico (v0.7)
 
-- [ ] Mejorar extracción de metadatos (duración, track number, year, genre) según formato.
-- [ ] Mejorar tabla/listado de librería (ordenar por título/artista/álbum/duración).
-- [ ] Añadir búsqueda global y filtros rápidos.
-- [ ] Crear/editar/eliminar playlists manuales desde UI.
-- [ ] Añadir/remover canciones a playlists manuales desde librería.
-- [ ] Editor de reglas para smart playlists (AND/OR, múltiples condiciones).
-- [ ] Recalcular smart playlists al cambiar favoritos o metadatos.
+- [ ] Soporte multi-carpeta raíz para la biblioteca.
+- [ ] Detección incremental de cambios en carpetas (sin reindexado full).
+- [ ] Dedupe de canciones por hash/metadata al indexar.
+- [ ] Logging estructurado para diagnóstico (`logs/` por sesión).
+- [ ] Tests de integración para indexado + persistencia + reproducción.
 
-## Fase v0.4 - Last.fm completo + visual premium
+## Pendiente UX/UI (v0.8)
 
-Objetivo: integrar ecosistema externo y reforzar experiencia visual.
-
-- [ ] Implementar flujo de autenticación dentro de la app para obtener/renovar `session_key`.
-- [ ] Guardar credenciales/token de Last.fm de forma persistente y segura.
-- [ ] Mostrar en UI el playcount de Last.fm por canción en librería/detalle.
-- [ ] Mejorar estrategia de scrobble (umbral de tiempo reproducido antes de enviar).
-- [ ] Vista de álbumes con carátulas reales (no solo texto).
-- [ ] Vista de artistas con agrupación navegable.
-
-## Fase v0.5 - Escala, sincronización y estabilidad
-
-Objetivo: preparar Musaik para colecciones grandes y operación estable.
-
-- [ ] Detectar y manejar cambios en carpeta (archivos agregados/eliminados) sin reindexado total manual.
-- [ ] Evitar duplicados de canciones al indexar múltiples rutas.
-- [ ] Soportar múltiples carpetas raíz para una sola librería.
-- [ ] Añadir tests de integración para indexado + persistencia.
-- [ ] Manejo de errores más explícito en UI para fallos de reproducción y red.
-- [ ] Definir estrategia de logging para diagnóstico en desarrollo y producción.
+- [ ] Pulido pixel-perfect final contra `screen.png` (spacing/tipo/tamaños exactos).
+- [ ] Estado vacío y skeletons de carga en cada vista.
+- [ ] Atajos globales configurables (media keys, cmd+shift+f, etc.).
+- [ ] Mini player / compact mode opcional.

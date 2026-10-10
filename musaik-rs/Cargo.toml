@@ -1,0 +1,16 @@
+[package]
+name = "musaik-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+dirs = "6.0"
+gpui = "*"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+url = "2.5"
+walkdir = "2.5"
+md5 = "0.7"
