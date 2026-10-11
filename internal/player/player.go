@@ -51,12 +51,14 @@ type Player struct {
 	events      chan Event
 	clockNow    func() time.Time
 	disableExec bool
+	volume      int
 }
 
 func New() *Player {
 	return &Player{
 		events:   make(chan Event, 16),
 		clockNow: time.Now,
+		volume:   80,
 	}
 }
 
@@ -81,7 +83,7 @@ func (p *Player) PlayFrom(path string, knownDuration time.Duration, offset time.
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd, controlIn, err := startBackend(ctx, path, offset, p.disableExec)
+	cmd, controlIn, err := startBackend(ctx, path, offset, p.volume, p.disableExec)
 	if err != nil {
 		cancel()
 		p.lastError = err
@@ -116,7 +118,7 @@ func (p *Player) TogglePause() error {
 
 	if p.isPaused {
 		ctx, cancel := context.WithCancel(context.Background())
-		cmd, controlIn, err := startBackend(ctx, p.nowPath, p.seekBase, p.disableExec)
+		cmd, controlIn, err := startBackend(ctx, p.nowPath, p.seekBase, p.volume, p.disableExec)
 		if err != nil {
 			cancel()
 			p.lastError = err
@@ -248,7 +250,7 @@ func (p *Player) SeekTo(pos time.Duration) error {
 	p.stopProcessKeepTrackLocked()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd, controlIn, err := startBackend(ctx, path, pos, p.disableExec)
+	cmd, controlIn, err := startBackend(ctx, path, pos, p.volume, p.disableExec)
 	if err != nil {
 		cancel()
 		p.lastError = err
@@ -274,6 +276,62 @@ func (p *Player) SeekTo(pos time.Duration) error {
 
 func (p *Player) Events() <-chan Event {
 	return p.events
+}
+
+func (p *Player) Volume() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.volume
+}
+
+func (p *Player) SetVolume(volume int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if volume < 0 {
+		volume = 0
+	}
+	if volume > 100 {
+		volume = 100
+	}
+	if p.volume == volume {
+		return nil
+	}
+	p.volume = volume
+
+	if p.nowPath == "" || p.isPaused || p.cmd == nil {
+		return nil
+	}
+
+	path := p.nowPath
+	duration := p.duration
+	pos := p.positionLocked()
+	p.stopProcessKeepTrackLocked()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd, controlIn, err := startBackend(ctx, path, pos, p.volume, p.disableExec)
+	if err != nil {
+		cancel()
+		p.lastError = err
+		return err
+	}
+
+	p.cmd = cmd
+	p.cancel = cancel
+	p.controlIn = controlIn
+	p.nowPath = path
+	p.isPaused = false
+	p.duration = duration
+	p.seekBase = pos
+	p.startedAt = p.clockNow()
+	p.pauseAccum = 0
+	p.pausedAt = time.Time{}
+	p.lastError = nil
+	p.generation++
+	gen := p.generation
+	go p.waitForTrackEnd(cmd, cancel, path, gen)
+
+	return nil
 }
 
 func (p *Player) waitForTrackEnd(cmd *exec.Cmd, cancel context.CancelFunc, path string, gen uint64) {
@@ -329,16 +387,23 @@ func (p *Player) positionLocked() time.Duration {
 	return pos
 }
 
-func startBackend(ctx context.Context, path string, offset time.Duration, disableExec bool) (*exec.Cmd, io.WriteCloser, error) {
+func startBackend(ctx context.Context, path string, offset time.Duration, volume int, disableExec bool) (*exec.Cmd, io.WriteCloser, error) {
 	bin, err := findExecutable("ffplay")
 	if err != nil {
 		return nil, nil, errors.New("ffplay no está disponible (instala ffmpeg)")
+	}
+	if volume < 0 {
+		volume = 0
+	}
+	if volume > 100 {
+		volume = 100
 	}
 	offsetSec := strconv.FormatFloat(offset.Seconds(), 'f', 3, 64)
 	args := []string{
 		"-nodisp",
 		"-autoexit",
 		"-loglevel", "error",
+		"-volume", strconv.Itoa(volume),
 		"-ss", offsetSec,
 		path,
 	}

@@ -207,23 +207,19 @@ impl Render for RootView {
 
         let sidebar_item = |nav_id: usize, label: &'static str, section_key: Section| {
             let is_active = self.state.section == section_key;
-            let bg = if is_active {
-                gpui::rgb(0x2A2F3F)
-            } else {
-                gpui::rgb(0x1A1D26)
-            };
             let fg = if is_active {
-                gpui::rgb(0xF8FAFC)
+                gpui::rgb(0xF472B6)
             } else {
                 gpui::rgb(0x94A3B8)
             };
             div()
                 .id(("nav", nav_id))
-                .px_3()
-                .py_2()
-                .rounded_md()
-                .bg(bg)
+                .w_full()
+                .px_1()
+                .py_1()
                 .text_color(fg)
+                .cursor_pointer()
+                .hover(|this| this.text_color(gpui::rgb(0xE2E8F0)))
                 .child(label)
                 .on_click(cx.listener(move |this, _, _, _| {
                     this.state.set_section(section_key);
@@ -328,6 +324,9 @@ impl Render for RootView {
                             .p_2()
                             .rounded_lg()
                             .bg(gpui::rgb(0x181C25))
+                            .flex()
+                            .flex_col()
+                            .items_start()
                             .child(div().text_sm().text_color(gpui::rgb(0x94A3B8)).child("Navegación"))
                             .child(div().mt(px(8.)).child(sidebar_item(0, "Explorar", Section::Explore)))
                             .child(div().mt(px(4.)).child(sidebar_item(1, "Recientes", Section::Recent)))

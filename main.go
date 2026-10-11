@@ -72,10 +72,14 @@ type app struct {
 	rootInput      string
 	searchQuery    string
 	actionQuery    string
+	actionPrevQ    string
 	actionOpen     bool
+	actionIndex    int
 	status         string
 	selectedID     string
 	selectedArtist string
+	artistDetailOn bool
+	volumeLevel    float64
 	playIndex      int
 	shuffle        bool
 	repeat         bool
@@ -115,6 +119,7 @@ func newApp() *app {
 		status:           "Listo para indexar música",
 		selectedID:       "",
 		playIndex:        -1,
+		volumeLevel:      80,
 		covers:           map[string]*ui.Bitmap{},
 		coverLRU:         []string{},
 		lastfmAPIKey:     os.Getenv("LASTFM_API_KEY"),
@@ -137,6 +142,7 @@ func newApp() *app {
 		a.status = fmt.Sprintf("Biblioteca cargada: %d canciones", len(a.store.Songs))
 	}
 	a.refreshLastFMClient()
+	a.volumeLevel = float64(a.player.Volume())
 	return a
 }
 
@@ -345,7 +351,20 @@ func (a *app) updateUI(fn func()) {
 func (a *app) view(c *ui.Context) {
 	a.applyTheme(c)
 	a.consumePlayerEvents()
-	root := ui.Column(c).Fill().Background(sonoraCanvas).Children(func() {
+	c.OnShortcut(ui.Cmd, ui.KeyP, func() {
+		a.actionOpen = !a.actionOpen
+		if a.actionOpen {
+			a.actionQuery = ""
+			a.actionPrevQ = ""
+			a.actionIndex = 0
+		}
+	})
+	c.OnShortcut(0, ui.KeyEscape, func() {
+		if a.actionOpen {
+			a.actionOpen = false
+		}
+	})
+	ui.Column(c).Fill().Background(sonoraCanvas).Children(func() {
 		a.viewTopBar(c)
 		ui.Row(c).Grow(1).Padding(16).Gap(14).AlignItems(ui.Stretch).Children(func() {
 			a.viewSidebar(c)
@@ -354,17 +373,6 @@ func (a *app) view(c *ui.Context) {
 			})
 		})
 		a.viewControls(c)
-	})
-	root.OnShortcut(ui.Cmd, ui.KeyP, func() {
-		a.actionOpen = !a.actionOpen
-		if a.actionOpen {
-			a.actionQuery = ""
-		}
-	})
-	root.OnShortcut(0, ui.KeyEscape, func() {
-		if a.actionOpen {
-			a.actionOpen = false
-		}
 	})
 	a.viewActionBar(c)
 }
@@ -429,6 +437,7 @@ func (a *app) viewSidebar(c *ui.Context) {
 		Width(172).
 		Padding(12, 8).
 		Gap(8).
+		AlignItems(ui.Start).
 		Background(sonoraSidebar).
 		Border(1, sonoraBorder).
 		Radius(12).
@@ -466,20 +475,38 @@ func (a *app) viewSidebar(c *ui.Context) {
 }
 
 func (a *app) sidebarNavButton(c *ui.Context, sec section, icon, label string) {
-	btn := ui.Button(c, icon+" "+label)
-	if a.section == sec {
-		btn.Background(ui.RGBA(244, 63, 94, 0.14)).TextColor(sonoraText)
+	row := ui.Row(c).Width(156).Padding(6, 4).Gap(8).Radius(6)
+	isActive := a.section == sec
+	if isActive {
+		row.TextColor(sonoraAccent)
 	} else {
-		btn.Background(ui.RGBA(255, 255, 255, 0.00)).TextColor(sonoraTextMuted)
+		row.TextColor(sonoraTextMuted)
+		if row.Hovered() {
+			row.TextColor(sonoraText)
+		}
 	}
-	if btn.Clicked() {
+	row.Children(func() {
+		ui.Text(c, icon).FontSize(12)
+		ui.Text(c, label).FontSize(12)
+	})
+	if row.Clicked() {
 		a.section = sec
+		if sec == sectionArtists {
+			a.artistDetailOn = false
+		}
 		_ = a.saveSettings()
 	}
 }
 
 func (a *app) sidebarPlaylist(c *ui.Context, icon, label string) {
-	ui.Button(c, icon+" "+label).Background(ui.RGBA(255, 255, 255, 0.00)).TextColor(sonoraTextMuted)
+	row := ui.Row(c).Width(156).Padding(6, 4).Gap(8).Radius(6).TextColor(sonoraTextMuted)
+	if row.Hovered() {
+		row.TextColor(sonoraText)
+	}
+	row.Children(func() {
+		ui.Text(c, icon).FontSize(12)
+		ui.Text(c, label).FontSize(12)
+	})
 }
 
 func (a *app) viewMain(c *ui.Context) {
@@ -491,7 +518,6 @@ func (a *app) viewMain(c *ui.Context) {
 			a.viewHero(c)
 			a.viewSongs(c, a.filteredSongs(a.store.Songs))
 		case sectionArtists:
-			a.viewHero(c)
 			a.viewArtists(c)
 		case sectionAlbums:
 			a.viewHero(c)
@@ -634,102 +660,176 @@ func (a *app) viewArtists(c *ui.Context) {
 		a.selectedArtist = artists[0]
 	}
 
-	ui.Row(c).Grow(1).Gap(12).Children(func() {
-		ui.Column(c).
-			Width(240).
-			Padding(8, 8).
-			Gap(8).
-			Background(ui.RGBA(255, 255, 255, 0.03)).
-			Border(1, sonoraBorder).
-			Radius(12).
-			Children(func() {
-				ui.Textf(c, "Artistas (%d)", len(artists)).FontSize(12).TextColor(sonoraTextMuted)
-				ui.Scroll(c).Grow(1).Gap(6).Children(func() {
-					for _, artist := range artists {
-						btn := ui.Button(c, artist).Width(220)
-						if artist == a.selectedArtist {
-							btn.Background(ui.RGBA(244, 63, 94, 0.14)).TextColor(sonoraText)
-						} else {
-							btn.Background(ui.RGBA(255, 255, 255, 0.02)).TextColor(sonoraTextMuted)
-						}
-						if btn.Clicked() {
-							a.selectedArtist = artist
-						}
-					}
-				})
-			})
+	if a.artistDetailOn {
+		a.viewArtistDetail(c, a.selectedArtist)
+		return
+	}
 
-		groups := a.groupSongsByAlbumForArtist(a.selectedArtist)
-		ui.Scroll(c).
-			Grow(1).
-			Padding(2, 2).
-			Gap(10).
-			Children(func() {
-				ui.Text(c, a.selectedArtist).FontSize(24).FontWeight(700).TextColor(sonoraText)
-				if len(groups) == 0 {
-					ui.Text(c, "Sin canciones para este artista").TextColor(sonoraTextMuted)
-					return
-				}
-				for _, group := range groups {
-					ui.Column(c).
-						Padding(10, 10).
+	ui.Column(c).
+		Grow(1).
+		Padding(12, 12).
+		Gap(10).
+		Background(ui.RGBA(255, 255, 255, 0.03)).
+		Border(1, sonoraBorder).
+		Radius(12).
+		Children(func() {
+			ui.Textf(c, "Artistas (%d)", len(artists)).FontSize(14).FontWeight(700).TextColor(sonoraText)
+			ui.Text(c, "Listado alfabético · click para abrir detalle del artista").FontSize(11).TextColor(sonoraTextTertiary)
+			ui.Scroll(c.Key("artists-directory-scroll")).Grow(1).Gap(6).Children(func() {
+				for _, artist := range artists {
+					artistName := artist
+					albumCount := a.artistAlbumCount(artistName)
+					row := ui.Row(c).
+						Padding(8, 10).
 						Gap(8).
-						Background(ui.RGBA(255, 255, 255, 0.03)).
-						Border(1, sonoraBorder).
-						Radius(12).
-						Children(func() {
-							ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-								ui.Box(c).Size(54, 54).Radius(8).Background(ui.RGBA(255, 255, 255, 0.06)).Children(func() {
-									if bmp := a.coverBitmap(group.Songs[0]); bmp != nil {
-										ui.Image(c, bmp).Fill().Fit(ui.Cover).Radius(8)
-									}
-								})
-								ui.Column(c).Grow(1).Gap(2).Children(func() {
-									ui.Text(c, group.Album).FontSize(16).FontWeight(700).TextColor(sonoraText)
-									ui.Textf(c, "%d canciones", len(group.Songs)).FontSize(12).TextColor(sonoraTextMuted)
-								})
-							})
-
-							for _, song := range group.Songs {
-								ui.Row(c).
-									Padding(6, 8).
-									Gap(8).
-									Background(ui.RGBA(255, 255, 255, 0.02)).
-									Border(1, ui.RGBA(255, 255, 255, 0.04)).
-									Radius(8).
-									AlignItems(ui.Center).
-									Children(func() {
-										trackLabel := "—"
-										if song.TrackNum > 0 {
-											trackLabel = fmt.Sprintf("%d", song.TrackNum)
-										}
-										ui.Text(c, trackLabel).Font("monospace").Width(28).TextColor(sonoraTextTertiary)
-										ui.Text(c, song.Title).Grow(1).SingleLine().TextColor(sonoraText)
-										ui.Text(c, formatDuration(song.Duration)).Font("monospace").TextColor(sonoraTextMuted)
-										if ui.Button(c, "▶").Width(30).Clicked() {
-											a.playSongByID(song.ID)
-										}
-									})
-							}
-						})
+						Background(ui.RGBA(255, 255, 255, 0.02)).
+						Border(1, ui.RGBA(255, 255, 255, 0.06)).
+						Radius(10)
+					if row.Hovered() {
+						row.Background(ui.RGBA(255, 255, 255, 0.07))
+					}
+					row.Children(func() {
+						ui.Text(c, artistName).Grow(1).SingleLine().TextColor(sonoraText)
+						ui.Textf(c, "%d álbumes", albumCount).FontSize(12).TextColor(sonoraTextMuted)
+					})
+					if row.Clicked() {
+						a.selectedArtist = artistName
+						a.artistDetailOn = true
+					}
 				}
 			})
-	})
+		})
 }
 
 func (a *app) filteredArtists() []string {
 	artists := a.store.Artists()
 	q := strings.TrimSpace(strings.ToLower(a.searchQuery))
-	if q == "" {
-		return artists
-	}
 	out := make([]string, 0, len(artists))
 	for _, artist := range artists {
-		if strings.Contains(strings.ToLower(artist), q) {
+		if q == "" || strings.Contains(strings.ToLower(artist), q) {
 			out = append(out, artist)
 		}
 	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i]) < strings.ToLower(out[j])
+	})
 	return out
+}
+
+func (a *app) artistAlbumCount(artist string) int {
+	albums := map[string]bool{}
+	for _, s := range a.store.Songs {
+		if s.Artist != artist {
+			continue
+		}
+		album := strings.TrimSpace(s.Album)
+		if album == "" {
+			album = "Unknown Album"
+		}
+		albums[strings.ToLower(album)] = true
+	}
+	return len(albums)
+}
+
+func (a *app) viewArtistDetail(c *ui.Context, artist string) {
+	groups := a.groupSongsByAlbumForArtist(artist)
+	ui.Column(c).
+		Grow(1).
+		Padding(12, 12).
+		Gap(10).
+		Background(ui.RGBA(255, 255, 255, 0.03)).
+		Border(1, sonoraBorder).
+		Radius(12).
+		Clip().
+		Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+				if ui.Button(c, "← Volver a artistas").Clicked() {
+					a.artistDetailOn = false
+				}
+				ui.Text(c, artist).FontSize(28).FontWeight(700).TextColor(sonoraText)
+				ui.Textf(c, "%d álbumes · %d canciones", len(groups), countSongsInGroups(groups)).FontSize(12).TextColor(sonoraTextMuted)
+			})
+
+			ui.Row(c).Gap(10).Children(func() {
+				preview := min(3, len(groups))
+				for i := 0; i < preview; i++ {
+					group := groups[i]
+					ui.Column(c).
+						Width(170).
+						Padding(8, 8).
+						Gap(6).
+						Background(ui.RGBA(255, 255, 255, 0.03)).
+						Border(1, sonoraBorder).
+						Radius(10).
+						Children(func() {
+							ui.Box(c).Size(150, 150).Radius(10).Background(ui.RGBA(255, 255, 255, 0.06)).Children(func() {
+								if len(group.Songs) > 0 {
+									if bmp := a.coverBitmap(group.Songs[0]); bmp != nil {
+										ui.Image(c, bmp).Fill().Fit(ui.Cover).Radius(10)
+									}
+								}
+							})
+							ui.Text(c, group.Album).SingleLine().TextColor(sonoraText)
+							ui.Textf(c, "%d canciones", len(group.Songs)).FontSize(11).TextColor(sonoraTextMuted)
+						})
+				}
+			})
+
+			ui.Scroll(c.Key("artist-detail-scroll")).
+				Grow(1).
+				Gap(10).
+				Children(func() {
+					if len(groups) == 0 {
+						ui.Text(c, "Sin canciones para este artista").TextColor(sonoraTextMuted)
+						return
+					}
+					for _, group := range groups {
+						groupCopy := group
+						ui.Column(c).
+							Padding(10, 10).
+							Gap(8).
+							Background(ui.RGBA(255, 255, 255, 0.03)).
+							Border(1, sonoraBorder).
+							Radius(12).
+							Children(func() {
+								ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+									ui.Text(c, groupCopy.Album).FontSize(17).FontWeight(700).TextColor(sonoraText)
+									ui.Textf(c, "%d canciones", len(groupCopy.Songs)).FontSize(12).TextColor(sonoraTextMuted)
+								})
+								for _, song := range groupCopy.Songs {
+									songCopy := song
+									trackLabel := "—"
+									if songCopy.TrackNum > 0 {
+										trackLabel = fmt.Sprintf("%d", songCopy.TrackNum)
+									}
+									ui.Row(c).
+										Padding(6, 8).
+										Gap(10).
+										Background(ui.RGBA(255, 255, 255, 0.02)).
+										Border(1, ui.RGBA(255, 255, 255, 0.04)).
+										Radius(8).
+										AlignItems(ui.Center).
+										Children(func() {
+											ui.Text(c, trackLabel).Font("monospace").Width(28).TextColor(sonoraTextTertiary)
+											ui.Text(c, songCopy.Title).Grow(1).SingleLine().TextColor(sonoraText)
+											ui.Text(c, formatDuration(songCopy.Duration)).Font("monospace").TextColor(sonoraTextMuted)
+											if ui.Button(c, "▶").Width(30).Clicked() {
+												a.playSongByID(songCopy.ID)
+											}
+										})
+								}
+							})
+					}
+				})
+		})
+}
+
+func countSongsInGroups(groups []artistAlbumGroup) int {
+	total := 0
+	for _, g := range groups {
+		total += len(g.Songs)
+	}
+	return total
 }
 
 func (a *app) groupSongsByAlbumForArtist(artist string) []artistAlbumGroup {
@@ -870,6 +970,18 @@ func (a *app) viewActionBar(c *ui.Context) {
 		return
 	}
 	hits := a.actionHits()
+	if len(hits) > 12 {
+		hits = hits[:12]
+	}
+	if len(hits) == 0 {
+		a.actionIndex = 0
+	} else if a.actionIndex < 0 || a.actionIndex >= len(hits) {
+		a.actionIndex = len(hits) - 1
+	}
+	if a.actionQuery != a.actionPrevQ {
+		a.actionIndex = 0
+		a.actionPrevQ = a.actionQuery
+	}
 	ui.Modal(c, &a.actionOpen, func() {
 		ui.Column(c).
 			Width(720).
@@ -884,10 +996,33 @@ func (a *app) viewActionBar(c *ui.Context) {
 					Placeholder("Buscar artista o canción…").
 					AutoFocus().
 					Width(696)
-				if input.Submitted() && len(hits) > 0 {
-					a.applyActionHit(hits[0])
+				if len(hits) > 0 {
+					input.HandleInput(func(ev ui.InputEvent) bool {
+						if ev.Kind != ui.InputKeyDown {
+							return false
+						}
+						switch ev.Key {
+						case ui.KeyDown:
+							a.actionIndex = (a.actionIndex + 1) % len(hits)
+							return true
+						case ui.KeyUp:
+							a.actionIndex = (a.actionIndex + len(hits) - 1) % len(hits)
+							return true
+						case ui.KeyEnter:
+							if a.actionIndex < 0 || a.actionIndex >= len(hits) {
+								a.actionIndex = 0
+							}
+							a.applyActionHit(hits[a.actionIndex])
+							return true
+						default:
+							return false
+						}
+					})
 				}
-				ui.Text(c, "Cmd+P para abrir/cerrar · Enter para ejecutar el primer resultado").FontSize(11).TextColor(sonoraTextTertiary)
+				if input.Submitted() && len(hits) > 0 {
+					a.applyActionHit(hits[a.actionIndex])
+				}
+				ui.Text(c, "Cmd+P abrir/cerrar · Esc cerrar · ↑/↓ seleccionar · Enter ejecutar").FontSize(11).TextColor(sonoraTextTertiary)
 				if len(hits) == 0 {
 					ui.Row(c).
 						Padding(10, 10).
@@ -899,24 +1034,33 @@ func (a *app) viewActionBar(c *ui.Context) {
 						})
 					return
 				}
-				ui.Scroll(c).MaxHeight(300).Gap(6).Children(func() {
-					for _, hit := range hits {
+				ui.Column(c).Gap(6).Children(func() {
+					for i, hit := range hits {
 						h := hit
-						ui.Row(c).
+						idx := i
+						row := ui.Row(c).
 							Padding(8, 10).
 							Gap(8).
-							Background(ui.RGBA(255, 255, 255, 0.03)).
 							Border(1, sonoraBorder).
-							Radius(8).
-							Children(func() {
-								ui.Column(c).Grow(1).Gap(2).Children(func() {
-									ui.Text(c, h.Title).SingleLine().TextColor(sonoraText)
-									ui.Text(c, h.Subtitle).SingleLine().FontSize(12).TextColor(sonoraTextMuted)
-								})
-								if ui.Button(c, "Abrir").Width(60).Clicked() {
-									a.applyActionHit(h)
-								}
+							Radius(8)
+						if idx == a.actionIndex {
+							row.Background(ui.RGBA(244, 63, 94, 0.16))
+						} else {
+							row.Background(ui.RGBA(255, 255, 255, 0.03))
+							if row.Hovered() {
+								row.Background(ui.RGBA(255, 255, 255, 0.08))
+							}
+						}
+						row.Children(func() {
+							ui.Column(c).Grow(1).Gap(2).Children(func() {
+								ui.Text(c, h.Title).SingleLine().TextColor(sonoraText)
+								ui.Text(c, h.Subtitle).SingleLine().FontSize(12).TextColor(sonoraTextMuted)
 							})
+						})
+						if row.Clicked() {
+							a.actionIndex = idx
+							a.applyActionHit(h)
+						}
 					}
 				})
 			})
@@ -1013,6 +1157,7 @@ func (a *app) applyActionHit(hit actionHit) {
 	case "artist":
 		a.section = sectionArtists
 		a.selectedArtist = hit.ArtistName
+		a.artistDetailOn = true
 		a.status = "Artista seleccionado: " + hit.ArtistName
 	case "song":
 		a.section = sectionLibrary
@@ -1577,9 +1722,9 @@ func (a *app) viewControls(c *ui.Context) {
 	position := state.Position
 	_, currentSong, hasCurrent := a.findSong(a.selectedID)
 	if duration > 0 {
-		if a.sliderAt <= 0 || a.sliderAt > duration.Seconds() {
-			a.sliderAt = position.Seconds()
-		}
+		a.sliderAt = position.Seconds()
+	} else {
+		a.sliderAt = 0
 	}
 
 	ui.Column(c).
@@ -1687,6 +1832,16 @@ func (a *app) viewControls(c *ui.Context) {
 				}
 
 				ui.Spacer(c)
+
+				ui.Row(c).Width(210).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "🔉").FontSize(12).TextColor(sonoraTextMuted)
+					if ui.Slider(c.Key("volume"), &a.volumeLevel, 0, 100).Step(1).Grow(1).Changed() {
+						if err := a.player.SetVolume(int(a.volumeLevel)); err != nil {
+							a.status = "No se pudo ajustar volumen: " + err.Error()
+						}
+					}
+					ui.Text(c, "🔊").FontSize(12).TextColor(sonoraTextMuted)
+				})
 			})
 		})
 }
