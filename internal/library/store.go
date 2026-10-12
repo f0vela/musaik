@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"musaik/internal/model"
 )
@@ -33,9 +34,13 @@ func NewStore() *Store {
 
 func (s *Store) Index(root string) error {
 	oldCounts := make(map[string]int, len(s.Songs))
+	oldLastPlayed := make(map[string]model.Song, len(s.Songs))
 	for _, song := range s.Songs {
 		if song.PlayCount > 0 {
 			oldCounts[song.ID] = song.PlayCount
+		}
+		if !song.LastPlayedAt.IsZero() {
+			oldLastPlayed[song.ID] = song
 		}
 	}
 
@@ -46,6 +51,9 @@ func (s *Store) Index(root string) error {
 	for i := range songs {
 		if count, ok := oldCounts[songs[i].ID]; ok {
 			songs[i].PlayCount = count
+		}
+		if oldSong, ok := oldLastPlayed[songs[i].ID]; ok {
+			songs[i].LastPlayedAt = oldSong.LastPlayedAt
 		}
 	}
 	s.Root = root
@@ -138,6 +146,17 @@ func (s *Store) IncrementPlayCount(songID string) (int, bool) {
 		return s.Songs[i].PlayCount, true
 	}
 	return 0, false
+}
+
+func (s *Store) MarkPlayedAt(songID string, at time.Time) bool {
+	for i := range s.Songs {
+		if s.Songs[i].ID != songID {
+			continue
+		}
+		s.Songs[i].LastPlayedAt = at
+		return true
+	}
+	return false
 }
 
 func (s *Store) SetPlayCount(songID string, count int) bool {

@@ -8,22 +8,30 @@ Implementado y funcional:
 
 - Indexado recursivo de carpetas para `mp3`, `mp4`, `flac`, `ogg`.
 - Persistencia local de biblioteca y ajustes:
-  - `state.json`: canciones indexadas, favoritos, playlists.
+  - `state.json`: canciones indexadas, favoritos, playlists, playcount y última reproducción por canción.
   - `settings.json`: sección activa, búsqueda, shuffle/repeat, Last.fm, iPod.
 - Vistas:
-  - **Explorar**
-  - **Canciones/Librería** (tabla con carátulas, número de track, plays, formato, duración, like)
+  - **Canciones/Librería** (listado completo con plays, formato, duración, tamaño y like)
+  - **Reproducidas recientemente** (solo canciones reproducidas en los últimos 15 días)
+  - **Favoritos** (canciones con like/corazón)
+  - **Álbumes**:
+    - grid de álbumes
+    - detalle de álbum estilo Sonora (header grande + tabla de pistas)
   - **Artistas** (detalle por artista agrupado por álbum, con carátula por álbum y canciones)
-  - **Álbumes** (grid)
-  - **Favoritos**
-  - **Playlists**
-  - **Ajustes**
+  - **Ajustes** (configuración Last.fm e iPod)
 - Reproducción:
   - previous / play-pause / next
   - shuffle / repeat
   - seek y barra de progreso
+  - like directo de la canción en reproducción (♥)
   - now playing en barra inferior (carátula + título + artista/álbum)
   - stop correcto al cerrar app
+- Interacciones de listado:
+  - clic en canción: seleccionar
+  - segundo clic en canción seleccionada: reproducir
+  - clic derecho por canción: actualizar playcount desde Last.fm y agregar a playlist
+- Shell/UI de ventana:
+  - top bar integrada con titlebar nativo (`TitleBarHiddenInset`) para look macOS más cercano al diseño.
 - Last.fm:
   - auth desde UI (flujo automático con callback local)
   - update now playing

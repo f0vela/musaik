@@ -11,10 +11,26 @@
   - [x] plays locales
   - [x] like
   - [x] carátula de álbum (sin repetición en filas del mismo álbum)
+- [x] Listado de canciones rediseñado (estilo oscuro Sonora) con columnas:
+  - [x] nombre de pista
+  - [x] artista
+  - [x] álbum
+  - [x] reproducciones
+  - [x] formato/tasa
+  - [x] duración
+  - [x] tamaño
+  - [x] like
+- [x] Vistas de biblioteca:
+  - [x] Canciones (todas)
+  - [x] Reproducidas recientemente (últimos 15 días)
+  - [x] Favoritos (like)
+- [x] Persistencia de última reproducción por canción (`LastPlayedAt`) para vista de recientes.
 - [x] Optimización de memoria de carátulas (downscale + caché LRU reducida).
 - [x] Menú contextual en canciones:
   - [x] agregar a playlist
   - [x] actualizar playcount desde Last.fm (si conectado)
+- [x] Detalle de álbum rediseñado en estilo Sonora (header + tabla de tracks + acciones).
+- [x] Integración de topbar con titlebar nativo (`TitleBarHiddenInset`) para look/UX macOS.
 - [x] Last.fm completo para uso diario:
   - [x] auth automática en Ajustes
   - [x] now playing + scrobble
@@ -45,7 +61,7 @@
 
 ## Pendiente UX/UI (v0.8)
 
-- [ ] Pulido pixel-perfect final contra `screen.png` (spacing/tipo/tamaños exactos).
+- [ ] Pulido pixel-perfect final contra `screen.png` (spacing/tipo/tamaños exactos en todas las vistas, especialmente álbumes/canciones).
 - [ ] Estado vacío y skeletons de carga en cada vista.
 - [ ] Atajos globales configurables (media keys, cmd+shift+f, etc.).
 - [ ] Mini player / compact mode opcional.

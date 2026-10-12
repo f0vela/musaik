@@ -35,6 +35,7 @@ App de escritorio para macOS enfocada en:
 - `Duration time.Duration`
 - `Format string` (ext sin punto)
 - `PlayCount int` (conteo local)
+- `LastPlayedAt time.Time` (última fecha/hora de reproducción local)
 
 `Playlist`:
 
@@ -100,18 +101,17 @@ Al cerrar ventana/app:
 
 Secciones:
 
-- Explorar
-- Recientes
-- Librería (Canciones)
+- Librería (Canciones: listado completo)
+- Reproducidas recientemente (últimos 15 días)
+- Favoritos (likes)
 - Artistas
 - Álbumes
-- Favoritos
-- Playlists
 - Ajustes
 
 Topbar:
 
 - búsqueda general por texto
+- integrada al titlebar nativo de ventana (`TitleBarHiddenInset`) con insets dinámicos del área de traffic lights para aspecto/mac behavior nativo.
 
 Player bar:
 
@@ -122,30 +122,48 @@ Player bar:
 
 ## 7) Vista Canciones (requisitos de comportamiento)
 
-Tabla con columnas:
+Listado con columnas:
 
-- Cover
-- `#` (track number desde metadata, vacío si no existe)
-- Título
+- Nombre de pista
 - Artista
 - Álbum
 - Reproducciones (local)
-- Formato
+- Formato / tasa (visual)
 - Duración
-- Like
+- Tamaño
+- Like (♥/♡)
 
-Cover en tabla:
+Interacción:
 
-- mostrar portada solo en primera fila de grupo de álbum
-- filas siguientes del mismo álbum: celda transparente
-- cache de carátulas con LRU y downscale para evitar alto consumo RAM
+- primer click: selecciona fila
+- click en fila seleccionada: reproduce canción
+- fila activa: estado visual de reproduciendo
 
 Menú contextual (right click) sobre tabla:
 
 - agregar a playlist manual
 - actualizar conteo desde Last.fm (solo habilitado si Last.fm conectado)
 
-## 8) Vista Artistas (requisitos)
+Filtros/vistas que usan el mismo listado:
+
+- Canciones: todas las canciones
+- Reproducidas recientemente: `LastPlayedAt >= now - 15 días`
+- Favoritos: `Favorites[song.ID] == true`
+
+Persistencia:
+
+- Al reproducir una canción se incrementa `PlayCount` y se guarda `LastPlayedAt`.
+
+## 8) Vista Álbumes (requisitos)
+
+- Grid de álbumes con portada representativa.
+- Detalle de álbum (estilo Sonora) con:
+  - encabezado grande (portada, metadata principal y chips)
+  - acciones: reproducir todo, aleatorio, like, menú
+  - tabla de pistas por álbum con selección y estado de reproducción
+  - menú contextual por pista para sync Last.fm
+
+## 9) Vista Artistas (requisitos)
 
 - panel izquierdo: lista de artistas clickeables
 - panel derecho: artista seleccionado
@@ -154,7 +172,7 @@ Menú contextual (right click) sobre tabla:
   - lista de canciones por álbum
   - orden preferente por `TrackNum`, fallback por título
 
-## 9) Last.fm (contrato API)
+## 10) Last.fm (contrato API)
 
 Campos requeridos:
 
@@ -182,7 +200,7 @@ Regla actual:
 
 - like local siempre se guarda; si Last.fm está activo también envía `track.love`
 
-## 10) iPod Classic (modo disco actual)
+## 11) iPod Classic (modo disco actual)
 
 Detección:
 
@@ -200,7 +218,7 @@ Limitación actual:
 
 - no se reescribe `iTunesDB` (paridad iTunes/Finder no garantizada para firmware stock)
 
-## 11) Action Bar (Cmd+P)
+## 12) Action Bar (Cmd+P)
 
 Modal flotante con input y resultados:
 
@@ -215,14 +233,14 @@ Atajos:
 - `Esc` cierra
 - `Enter` ejecuta primer resultado
 
-## 12) Reglas de rendimiento/memoria
+## 13) Reglas de rendimiento/memoria
 
 - no guardar binarios de portada dentro de `Song` persistido
 - reducir tamaño de portada antes de crear bitmap (downscale)
 - cache LRU limitada
 - evitar renders innecesarios de artwork repetido
 
-## 13) Criterios de compatibilidad para un port
+## 14) Criterios de compatibilidad para un port
 
 El port se considera equivalente si cumple:
 
@@ -233,7 +251,7 @@ El port se considera equivalente si cumple:
 5. Misma Action Bar (búsqueda + acciones).
 6. Mismo contrato de sync iPod Classic actual (modo disco + m3u8).
 
-## 14) Extensiones recomendadas para siguiente iteración
+## 15) Extensiones recomendadas para siguiente iteración
 
 - soporte real de `iTunesDB` para iPod Classic
 - biblioteca multi-root

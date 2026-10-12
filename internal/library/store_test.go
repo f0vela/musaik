@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"musaik/internal/model"
 )
@@ -69,6 +70,13 @@ func TestPlayCountOperations(t *testing.T) {
 	}
 	if s.Songs[0].PlayCount != 7 {
 		t.Fatalf("expected play count 7, got %d", s.Songs[0].PlayCount)
+	}
+	when := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	if !s.MarkPlayedAt("1", when) {
+		t.Fatal("expected MarkPlayedAt to succeed")
+	}
+	if !s.Songs[0].LastPlayedAt.Equal(when) {
+		t.Fatalf("expected LastPlayedAt %v, got %v", when, s.Songs[0].LastPlayedAt)
 	}
 }
 
