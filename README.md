@@ -1,66 +1,48 @@
 # Musaik
 
-Musaik es una app de escritorio **nativa para macOS** (Go + Mygo UI nativa) para gestionar y reproducir música local con enfoque visual tipo Sonora/screen reference.
+Musaik es una app de escritorio **nativa para macOS** (Go + Mygo) para reproducción de música local con biblioteca, playlists, queue y controles estilo app de audio moderna.
 
-## Estado actual
+## Funcionalidades principales
 
-Implementado y funcional:
-
-- Indexado recursivo de carpetas para `mp3`, `mp4`, `flac`, `ogg`.
-- Persistencia local de biblioteca y ajustes:
-  - `state.json`: canciones indexadas, favoritos, playlists, playcount y última reproducción por canción.
+- Biblioteca local con indexado recursivo para `mp3`, `mp4`, `flac`, `ogg`.
+- Persistencia local:
+  - `state.json`: canciones, favoritos, playlists, colores de playlist, playcount y última reproducción.
   - `settings.json`: sección activa, búsqueda, shuffle/repeat, Last.fm, iPod.
 - Vistas:
-  - **Canciones/Librería** (listado completo con plays, formato, duración, tamaño y like)
-  - **Reproducidas recientemente** (solo canciones reproducidas en los últimos 15 días)
-  - **Favoritos** (canciones con like/corazón)
-  - **Álbumes**:
-    - grid de álbumes
-    - detalle de álbum estilo Sonora (header grande + tabla de pistas)
-  - **Artistas** (detalle por artista agrupado por álbum, con carátula por álbum y canciones)
-  - **Ajustes** (configuración Last.fm e iPod)
-- Reproducción:
-  - previous / play-pause / next
-  - shuffle / repeat
-  - seek y barra de progreso
-  - like directo de la canción en reproducción (♥)
-  - now playing en barra inferior (carátula + título + artista/álbum)
-  - stop correcto al cerrar app
-- Interacciones de listado:
-  - clic en canción: seleccionar
-  - segundo clic en canción seleccionada: reproducir
-  - clic derecho por canción: actualizar playcount desde Last.fm y agregar a playlist
-- Shell/UI de ventana:
-  - top bar integrada con titlebar nativo (`TitleBarHiddenInset`) para look macOS más cercano al diseño.
+  - **Canciones** (tabla con título, artista, álbum, plays, formato, duración, tamaño, like)
+  - **Artistas** (listado simple y detalle por artista)
+  - **Álbumes** (grid + detalle)
+  - **Queue** (sección dedicada en sidebar con canción actual + siguientes)
+  - **Favoritos** y **Recientes**
+- Playlists:
+  - crear/renombrar/eliminar playlists manuales
+  - agregar canción por menú contextual o drag & drop al sidebar
+  - color por playlist (tag estilo Finder en sidebar)
+- Reproductor:
+  - play/pause/next/previous, shuffle, repeat (off/all/one), seek
+  - navegación contextual desde now-playing (título/caratula/artista/álbum)
+  - toggle de mute en barra de volumen
 - Last.fm:
-  - auth desde UI (flujo automático con callback local)
-  - update now playing
-  - scrobble
-  - like remoto (`track.love`) al dar like local
-  - sync manual de playcount por canción (`track.getInfo`)
+  - auth automática desde ajustes
+  - now playing, scrobble, `track.love`, sync de playcount/liked
 - iPod Classic (modo disco):
   - detección en `/Volumes`
-  - sync de playlist (copia de archivos + `.m3u8`)
-- Action Bar:
-  - `Cmd+P` abre barra flotante
-  - búsqueda de artista / canción / álbum
-  - acciones rápidas: play, pause, next, previous, settings, stop, quit
+  - exportación de playlist `.m3u8` + copia de audio
+- Action Bar (`Cmd+P`): búsqueda + acciones rápidas.
 
 ## Requisitos
 
 - Go 1.27+
-- Mygo CLI (como tool de Go)
-- `ffplay` y `ffprobe` para reproducción con progreso/seek.
+- Mygo CLI
+- `ffplay` y `ffprobe`
 
-Musaik busca estos binarios en este orden:
+Orden de resolución para `ffplay/ffprobe`:
 
 1. `PATH`
-2. `MUSAIK_FFMPEG_DIR` (si está definida)
-3. rutas embebidas/empacadas: `./bin`, `<ejecutable>/bin`, y en macOS app bundle `Contents/Resources/bin`
+2. `MUSAIK_FFMPEG_DIR`
+3. rutas embebidas/empacadas (`./bin`, `<ejecutable>/bin`, `Contents/Resources/bin` en macOS)
 
-Esto permite distribuir la app con `ffplay`/`ffprobe` incluidos, sin instalación global de ffmpeg.
-
-## Desarrollo local
+## Desarrollo
 
 ```bash
 go mod tidy
@@ -69,16 +51,8 @@ go tool mygo dev
 
 ## Tests
 
-Suite completa:
-
 ```bash
 go test ./...
-```
-
-Test puntual:
-
-```bash
-go test ./internal/library -run TestSmartPlaylistFavoritesFilter -v
 ```
 
 ## Build
@@ -87,59 +61,29 @@ go test ./internal/library -run TestSmartPlaylistFavoritesFilter -v
 go tool mygo build
 ```
 
-## Documento de especificación
+## Memoria y profiling (RAM)
 
-Para porting del proyecto a otro lenguaje/framework, ver:
-
-- [`PROJECT-SPECS.md`](./PROJECT-SPECS.md)
-
-## Last.fm
-
-Puedes configurar Last.fm por variables de entorno o desde **Ajustes**.
-
-Variables de entorno (opcional):
-
-```bash
-export LASTFM_API_KEY="..."
-export LASTFM_API_SECRET="..."
-export LASTFM_SESSION_KEY="..." # opcional si conectas desde Ajustes
-export LASTFM_USERNAME="..."
-```
-
-En Ajustes existe un botón para autorización automática que abre navegador y guarda `session_key`.
-
-## iPod Classic (5th gen / Video)
-
-En **Ajustes**:
-
-- `Detectar iPod Classic`: busca dispositivos montados en `/Volumes`.
-- `Sincronizar playlist a iPod`: copia canciones a `iPod_Control/Music/F00` y genera playlist `.m3u8` en `Playlists/`.
-
-Nota: la exportación actual no reescribe `iTunesDB`; según firmware/flujo del iPod puede requerir gestor externo para reflejar biblioteca Apple nativa.
-
-## Profiling de memoria (RAM)
-
-Puedes habilitar instrumentación de memoria y pprof para medir uso de RAM durante reproducción.
-
-Variables opcionales:
+Musaik incluye instrumentación opcional para pprof y muestreo de memoria:
 
 ```bash
 export MUSAIK_ENABLE_PPROF=1
-export MUSAIK_PPROF_ADDR="127.0.0.1:6060"   # opcional, default 127.0.0.1:6060
+export MUSAIK_PPROF_ADDR="127.0.0.1:6060"      # default: 127.0.0.1:6060
 export MUSAIK_PROFILE_LOG="/tmp/musaik-mem.csv"
-export MUSAIK_PROFILE_INTERVAL_MS=1000       # opcional, mínimo 250ms
+export MUSAIK_PROFILE_INTERVAL_MS=1000          # mínimo: 250
 ```
 
-Con eso, Musaik:
+Con estas variables:
 
 - expone `http://127.0.0.1:6060/debug/pprof/`
-- escribe CSV con muestras por intervalo:
+- escribe CSV por intervalo con:
   - `heap_alloc_mb`
   - `heap_sys_mb`
   - `rss_app_mb`
   - `rss_player_mb` (proceso `ffplay`)
   - `rss_total_mb` (app + backend)
 
-## Pendientes
+## Documentación del proyecto
 
-Los pendientes y próximos pasos están documentados en [`todo.md`](./todo.md).
+- Especificación técnica: [`PROJECT-SPECS.md`](./PROJECT-SPECS.md)
+- Roadmap y pendientes: [`todo.md`](./todo.md)
+- Operación, debugging y guías: [`docs/OPERATIONS.md`](./docs/OPERATIONS.md)

@@ -1,67 +1,45 @@
-# TODO - Musaik (estado actual + próximos pasos)
+# TODO - Musaik (actualizado)
 
-## Hecho
+## Completado recientemente
 
-- [x] Reproducción estable con `ffplay` + `ffprobe` (play/pause/resume/next/prev/seek/progress).
-- [x] Guardado de estado de biblioteca y preferencias (`state.json` + `settings.json`).
-- [x] Corrección de cierre de app (detener audio al cerrar).
-- [x] UI base alineada con diseño de referencia (sidebar/topbar/playerbar).
-- [x] Tabla de canciones con:
-  - [x] número de track desde metadata
-  - [x] plays locales
-  - [x] like
-  - [x] carátula de álbum (sin repetición en filas del mismo álbum)
-- [x] Listado de canciones rediseñado (estilo oscuro Sonora) con columnas:
-  - [x] nombre de pista
-  - [x] artista
-  - [x] álbum
-  - [x] reproducciones
-  - [x] formato/tasa
-  - [x] duración
-  - [x] tamaño
-  - [x] like
-- [x] Vistas de biblioteca:
-  - [x] Canciones (todas)
-  - [x] Reproducidas recientemente (últimos 15 días)
-  - [x] Favoritos (like)
-- [x] Persistencia de última reproducción por canción (`LastPlayedAt`) para vista de recientes.
-- [x] Optimización de memoria de carátulas (downscale + caché LRU reducida).
-- [x] Menú contextual en canciones:
-  - [x] agregar a playlist
-  - [x] actualizar playcount desde Last.fm (si conectado)
-- [x] Detalle de álbum rediseñado en estilo Sonora (header + tabla de tracks + acciones).
-- [x] Integración de topbar con titlebar nativo (`TitleBarHiddenInset`) para look/UX macOS.
-- [x] Last.fm completo para uso diario:
-  - [x] auth automática en Ajustes
-  - [x] now playing + scrobble
-  - [x] enviar like a Last.fm
-- [x] Vista Artistas avanzada (click artista -> canciones por álbum con carátula por álbum).
-- [x] Action Bar (`Cmd+P`) flotante con:
-  - [x] búsqueda de artista/canción/álbum
-  - [x] acciones play/pause/next/previous/stop/settings/quit
-- [x] iPod Classic modo disco:
-  - [x] detección en `/Volumes`
-  - [x] exportación de playlist a `.m3u8` y copia de audio
+- [x] Queue movido a sidebar como sección dedicada.
+- [x] Orden de sidebar de biblioteca ajustado.
+- [x] Sección Playlists colapsable.
+- [x] Playlists con icono + color/tag visual.
+- [x] Selección de color de playlist (crear + context menu).
+- [x] Navegación contextual desde barra de reproducción:
+  - [x] título/caratula -> canción en lista
+  - [x] artista -> detalle de artista
+  - [x] álbum -> detalle de álbum
+- [x] Limpieza de player bar:
+  - [x] quitar “Hi-Res”
+  - [x] quitar label de dispositivo
+  - [x] botón mute funcional con icono dinámico
+- [x] Optimización de memoria:
+  - [x] límites de cache reducidos
+  - [x] downscale de imágenes más agresivo
+  - [x] paginación en vista de canciones
+- [x] Instrumentación de profiling:
+  - [x] pprof opcional por env vars
+  - [x] log CSV periódico de heap + RSS app/ffplay/total
 
-## Pendiente prioritario (v0.6)
+## Próximo (prioridad alta)
 
-- [ ] Sync iPod Classic con `iTunesDB` real (no solo `.m3u8`) para compatibilidad total con firmware stock.
-- [ ] Crear/editar/eliminar playlists manuales completamente desde UI (pantalla dedicada).
-- [ ] Añadir acción “agregar a playlist nueva…” desde menú contextual.
-- [ ] Mejorar scrobble: enviar solo al cumplir umbral (ej. 50% o 4 min).
-- [ ] Mostrar indicador visual de estado Last.fm (conectado/error/pendiente) en topbar o settings.
+- [ ] Medición formal de RAM **en reproducción real** (no solo baseline idle) y validar objetivo ≤150MB p95.
+- [ ] Ajustar estrategia de queue para evitar crecer sin límite en sesiones largas.
+- [ ] Agregar acción “Quitar de queue” desde menú contextual en filas de queue.
+- [ ] Persistir/recordar estado de página en vista Canciones por sección/filtro (UX).
 
-## Pendiente técnico (v0.7)
+## Técnico (prioridad media)
 
-- [ ] Soporte multi-carpeta raíz para la biblioteca.
-- [ ] Detección incremental de cambios en carpetas (sin reindexado full).
-- [ ] Dedupe de canciones por hash/metadata al indexar.
-- [ ] Logging estructurado para diagnóstico (`logs/` por sesión).
-- [ ] Tests de integración para indexado + persistencia + reproducción.
+- [ ] Indexado incremental (watcher) para evitar reindexado completo.
+- [ ] Soporte multi-root de biblioteca.
+- [ ] Cache de metadata/artwork separada por disco con invalidación.
+- [ ] Logging estructurado para diagnósticos.
+- [ ] Tests de integración para: indexado, reproducción, persistencia, queue.
 
-## Pendiente UX/UI (v0.8)
+## Producto / Integraciones
 
-- [ ] Pulido pixel-perfect final contra `screen.png` (spacing/tipo/tamaños exactos en todas las vistas, especialmente álbumes/canciones).
-- [ ] Estado vacío y skeletons de carga en cada vista.
-- [ ] Atajos globales configurables (media keys, cmd+shift+f, etc.).
-- [ ] Mini player / compact mode opcional.
+- [ ] Scrobble con umbral estándar configurable (50% o 4min).
+- [ ] Indicador visual de estado Last.fm.
+- [ ] iPod: soporte `iTunesDB` real (además de `.m3u8`) para firmware stock.

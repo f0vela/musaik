@@ -1,260 +1,171 @@
-# Musaik - Especificación técnica detallada (para porting)
+# Musaik - Especificación técnica detallada (paridad de implementación)
 
-Este documento define el comportamiento funcional/técnico actual de Musaik para poder portar la app a otro lenguaje o framework (Swift, Rust, C#, Electron, Tauri, etc.) manteniendo paridad.
+Este documento describe el comportamiento actual para mantener paridad al portar Musaik a otro stack (Swift/AppKit, Rust, C#, Electron/Tauri, etc.).
 
 ## 1) Objetivo del producto
 
-App de escritorio para macOS enfocada en:
+- Reproductor local para macOS.
+- Gestión de biblioteca (canciones/artistas/álbumes/favoritos/recientes).
+- Playlists manuales con color/tag en sidebar.
+- Queue dedicada en navegación.
+- Integración Last.fm.
+- Exportación a iPod Classic (modo disco).
 
-- reproducir música local (`mp3`, `mp4`, `flac`, `ogg`)
-- gestionar biblioteca musical
-- visualizar artistas/álbumes/canciones/favoritos/playlists
-- integrar Last.fm (auth, scrobble, likes, playcount)
-- preparar sincronización hacia iPod Classic (modo disco)
+## 2) Arquitectura actual
 
-## 2) Arquitectura actual (Go + Mygo)
+- UI/App shell: `github.com/egoist/mygo` + `github.com/egoist/mygo/ui`
+- Entrada app/UI principal: `main.go`
+- Biblioteca/persistencia: `internal/library`
+- Reproducción: `internal/player` (`ffplay` + `ffprobe`)
+- Last.fm: `internal/lastfm`
+- iPod: `internal/ipod`
+- Modelos: `internal/model`
 
-- UI: `github.com/egoist/mygo/ui`
-- App shell: `github.com/egoist/mygo`
-- Reproductor: `internal/player` (backend `ffplay` + `ffprobe`, soporta binarios empacados en `bin/` o `Contents/Resources/bin`)
-- Biblioteca/indexado/persistencia: `internal/library`
-- Last.fm client: `internal/lastfm`
-- iPod classic (modo disco): `internal/ipod`
-- Modelos comunes: `internal/model`
+## 3) Modelo de datos
 
-## 3) Modelo de datos (paridad requerida)
+`Song`:
 
-`Song` (campos activos):
-
-- `ID string` (actualmente ruta del archivo)
-- `Path string`
-- `Title string`
-- `Artist string`
-- `Album string`
-- `TrackNum int` (tag track number si existe)
-- `Duration time.Duration`
-- `Format string` (ext sin punto)
-- `PlayCount int` (conteo local)
-- `LastPlayedAt time.Time` (última fecha/hora de reproducción local)
+- `ID`, `Path`, `Title`, `Artist`, `Album`, `TrackNum`
+- `Duration`, `Format`
+- `PlayCount`, `LastPlayedAt`
 
 `Playlist`:
 
-- `Name string`
-- `ManualSong []string` (IDs)
+- `Name`
+- `Color` (string, valores lógicos: `none`, `purple`, `yellow`, `red`, `orange`, `green`, `blue`, `gray`)
+- `ManualSong []string`
 - `Smart *SmartPlaylistFilter`
 
 `SmartPlaylistFilter`:
 
-- `ArtistContains`
-- `AlbumContains`
-- `TitleContains`
-- `FavoritesOnly`
+- `ArtistContains`, `AlbumContains`, `TitleContains`, `FavoritesOnly`
 
-Estado de store:
+Store:
 
-- `Root string`
-- `Songs []Song`
-- `Favorites map[string]bool`
-- `Playlists []Playlist`
+- `Root`, `Songs`, `Favorites`, `Playlists`
 
 ## 4) Persistencia local
 
-Directorio base: `~/Library/Application Support`/config dir de usuario bajo `musaik` (vía `os.UserConfigDir()`).
+Directorio: `os.UserConfigDir()/musaik`
 
-Archivos:
+- `state.json`:
+  - favoritos
+  - playlists (incluyendo color)
+  - root
+  - songs
+- `settings.json`:
+  - sección activa
+  - shuffle/repeat
+  - búsqueda
+  - ajustes Last.fm
+  - ajustes iPod
 
-1. `state.json` (biblioteca)
-   - favoritos
-   - playlists
-   - root
-   - songs
-2. `settings.json` (preferencias UI/servicios)
-   - sección activa
-   - shuffle/repeat
-   - rootInput/searchQuery
-   - credenciales Last.fm
-   - ajustes iPod (mount path + playlist elegida)
+## 5) Reproductor (contrato funcional)
 
-## 5) Reproducción (contrato funcional)
+- Backend por proceso externo:
+  - `ffplay -nodisp -autoexit -ss <offset>`
+  - duración vía `ffprobe`
+- Operaciones:
+  - play/seek/next/prev
+  - pause/resume (relanzando proceso desde offset)
+  - volume slider + mute toggle
+  - repeat: off/all/one
+  - shuffle
 
-Backend:
+Resolución de binarios `ffplay/ffprobe`:
 
-- reproducción con `ffplay -nodisp -autoexit -ss <offset> <path>`
-- duración con `ffprobe`
-
-Comportamiento:
-
-- `Play(path, duration)` y `PlayFrom(path, duration, offset)`
-- `TogglePause()`:
-  - pause: detiene proceso y guarda posición
-  - resume: relanza proceso desde posición guardada
-- `SeekTo(pos)` relanza backend desde nuevo offset
-- `Stop()` detiene y limpia estado
-- eventos de fin de pista para autoplay `next`/repeat/shuffle
-
-Al cerrar ventana/app:
-
-- detener player
-- persistir estado y settings
+1. `PATH`
+2. `MUSAIK_FFMPEG_DIR`
+3. rutas empaquetadas (`./bin`, `<exe>/bin`, `Contents/Resources/bin`)
 
 ## 6) UI y navegación
 
-Secciones:
+Sidebar (orden actual de biblioteca):
 
-- Librería (Canciones: listado completo)
-- Reproducidas recientemente (últimos 15 días)
-- Favoritos (likes)
-- Artistas
-- Álbumes
-- Ajustes
+1. Canciones
+2. Artistas
+3. Álbumes
+4. Queue
+5. Favoritos
+6. Recientes
 
-Topbar:
+Playlists:
 
-- búsqueda general por texto
-- integrada al titlebar nativo de ventana (`TitleBarHiddenInset`) con insets dinámicos del área de traffic lights para aspecto/mac behavior nativo.
+- Sección colapsable.
+- Item “Nueva playlist” con icono `+`.
+- Playlists con icono de playlist + color tag visual.
+- Context menu: renombrar, eliminar, cambiar color.
+- Soporte drag&drop de canción a playlist.
 
 Player bar:
 
-- progreso (slider)
-- tiempos actual/total
-- controles: shuffle, previous, play/pause, next, repeat
-- bloque now playing (carátula + título + artista/álbum)
+- Carátula/título clickeables (navega a canción).
+- Artista clickeable (detalle de artista).
+- Álbum clickeable (detalle de álbum).
+- Sin badge “Hi-Res” ni label de dispositivo al lado de volumen.
+- Botón de mute funcional con icono dinámico.
 
-## 7) Vista Canciones (requisitos de comportamiento)
+## 7) Vistas clave
 
-Listado con columnas:
+Canciones:
 
-- Nombre de pista
-- Artista
-- Álbum
-- Reproducciones (local)
-- Formato / tasa (visual)
-- Duración
-- Tamaño
-- Like (♥/♡)
+- Tabla con columnas: título, artista, álbum, plays, formato, duración, tamaño, like.
+- Paginación activa para limitar memoria de render (`songsPerPage`).
+- Menú contextual: add to queue, add to playlist, sync Last.fm.
 
-Interacción:
+Artistas:
 
-- primer click: selecciona fila
-- click en fila seleccionada: reproduce canción
-- fila activa: estado visual de reproduciendo
+- Lista simple (sin avatar): artista, número de álbumes, número de canciones.
+- Click abre detalle de artista.
 
-Menú contextual (right click) sobre tabla:
+Álbumes:
 
-- agregar a playlist manual
-- actualizar conteo desde Last.fm (solo habilitado si Last.fm conectado)
+- Grid + detalle de álbum.
 
-Filtros/vistas que usan el mismo listado:
+Queue:
 
-- Canciones: todas las canciones
-- Reproducidas recientemente: `LastPlayedAt >= now - 15 días`
-- Favoritos: `Favorites[song.ID] == true`
+- Pantalla dedicada en sección sidebar.
+- Muestra canción actual + siguientes.
+- Auto-fill de siguientes hasta mínimo 10 en orden aleatorio cuando aplica.
 
-Persistencia:
+## 8) Last.fm
 
-- Al reproducir una canción se incrementa `PlayCount` y se guarda `LastPlayedAt`.
+Capacidades:
 
-## 8) Vista Álbumes (requisitos)
-
-- Grid de álbumes con portada representativa.
-- Detalle de álbum (estilo Sonora) con:
-  - encabezado grande (portada, metadata principal y chips)
-  - acciones: reproducir todo, aleatorio, like, menú
-  - tabla de pistas por álbum con selección y estado de reproducción
-  - menú contextual por pista para sync Last.fm
-
-## 9) Vista Artistas (requisitos)
-
-- panel izquierdo: lista de artistas clickeables
-- panel derecho: artista seleccionado
-  - agrupación por álbum
-  - carátula por álbum
-  - lista de canciones por álbum
-  - orden preferente por `TrackNum`, fallback por título
-
-## 10) Last.fm (contrato API)
-
-Campos requeridos:
-
-- `APIKey`
-- `APISecret`
-- `SessionKey`
-- `Username`
-
-Métodos implementados:
-
+- Auth web callback local (`auth.getSession`)
 - `track.updateNowPlaying`
 - `track.scrobble`
 - `track.love`
-- `track.getInfo` (`userplaycount`)
-- `auth.getSession` (token -> session key)
+- `track.getInfo` (playcount + estado loved)
 
-Flujo auth integrado:
+## 9) iPod Classic (modo disco)
 
-1. abrir URL `https://www.last.fm/api/auth/?api_key=...&cb=http://127.0.0.1:<port>/callback`
-2. servidor local temporal recibe `token`
-3. intercambio por `session_key`
-4. guardar credenciales en settings
+- Detección de mounts válidos bajo `/Volumes`.
+- Exporta audio + playlist `.m3u8`.
+- No reescribe `iTunesDB` (limitación conocida).
 
-Regla actual:
+## 10) Rendimiento y memoria
 
-- like local siempre se guarda; si Last.fm está activo también envía `track.love`
+Medidas implementadas:
 
-## 11) iPod Classic (modo disco actual)
+- Downscale de imágenes:
+  - cover: `maxCoverSize=128`
+  - avatar: `maxAvatarSize=96`
+- LRU cache:
+  - covers: `maxCovers=40`
+  - artist avatars: `maxArtistAvatars=24`
+- Lista de canciones paginada para reducir nodos UI concurrentes.
 
-Detección:
+Diagnóstico en runtime:
 
-- scan de `/Volumes`
-- dispositivo válido si existe:
-  - `iPod_Control/`
-  - `iPod_Control/iTunes/iTunesDB`
+- `MUSAIK_ENABLE_PPROF=1` + `MUSAIK_PPROF_ADDR` habilita `net/http/pprof`.
+- `MUSAIK_PROFILE_LOG` habilita CSV periódico con heap y RSS (`app`, `ffplay`, `total`).
 
-Sync actual:
+## 11) Criterios de paridad para port
 
-- copia de canciones a `iPod_Control/Music/F00`
-- escritura de playlist `.m3u8` en `Playlists/`
-
-Limitación actual:
-
-- no se reescribe `iTunesDB` (paridad iTunes/Finder no garantizada para firmware stock)
-
-## 12) Action Bar (Cmd+P)
-
-Modal flotante con input y resultados:
-
-- artistas
-- canciones
-- álbumes
-- acciones rápidas: play, pause, next, previous, settings, stop, quit
-
-Atajos:
-
-- `Cmd+P` abre/cierra
-- `Esc` cierra
-- `Enter` ejecuta primer resultado
-
-## 13) Reglas de rendimiento/memoria
-
-- no guardar binarios de portada dentro de `Song` persistido
-- reducir tamaño de portada antes de crear bitmap (downscale)
-- cache LRU limitada
-- evitar renders innecesarios de artwork repetido
-
-## 14) Criterios de compatibilidad para un port
-
-El port se considera equivalente si cumple:
-
-1. Misma semántica de estado (biblioteca, favoritos, playlists, settings).
-2. Misma UX funcional en reproducción (seek/pause/resume/next/autoplay).
-3. Mismas capacidades Last.fm (auth + now playing + scrobble + love + playcount).
-4. Misma interacción de vistas clave (Canciones, Artistas, Álbumes, Ajustes).
-5. Misma Action Bar (búsqueda + acciones).
-6. Mismo contrato de sync iPod Classic actual (modo disco + m3u8).
-
-## 15) Extensiones recomendadas para siguiente iteración
-
-- soporte real de `iTunesDB` para iPod Classic
-- biblioteca multi-root
-- indexado incremental con watcher
-- scrobble con umbral estándar
-- logs estructurados y diagnósticos de crash/memoria
+1. Persistencia equivalente (`state/settings`) incluyendo color de playlist.
+2. Semántica de reproducción equivalente (seek, pause/resume, repeat/shuffle, mute).
+3. Navegación y UX equivalente en Canciones/Artistas/Álbumes/Queue/Playlists.
+4. Integración Last.fm equivalente.
+5. Contrato de iPod modo disco equivalente.
+6. Capacidad de profiling de memoria equivalente (o mejor).
