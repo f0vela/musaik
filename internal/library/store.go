@@ -192,6 +192,58 @@ func (s *Store) AddSongToManualPlaylist(name, songID string) error {
 	return fmt.Errorf("playlist %q no encontrada", name)
 }
 
+func (s *Store) RenameManualPlaylist(oldName, newName string) error {
+	oldTrimmed := strings.TrimSpace(oldName)
+	newTrimmed := strings.TrimSpace(newName)
+	if newTrimmed == "" {
+		return fmt.Errorf("nombre de playlist vacío")
+	}
+
+	targetIndex := -1
+	for i := range s.Playlists {
+		pl := s.Playlists[i]
+		if pl.Name != oldTrimmed {
+			continue
+		}
+		if pl.Smart != nil || pl.Name == "Todos" {
+			return fmt.Errorf("playlist %q no admite edición manual", oldTrimmed)
+		}
+		targetIndex = i
+		break
+	}
+	if targetIndex < 0 {
+		return fmt.Errorf("playlist %q no encontrada", oldTrimmed)
+	}
+
+	for i := range s.Playlists {
+		if i == targetIndex {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(s.Playlists[i].Name), newTrimmed) {
+			return fmt.Errorf("ya existe una playlist con ese nombre")
+		}
+	}
+
+	s.Playlists[targetIndex].Name = newTrimmed
+	return nil
+}
+
+func (s *Store) DeleteManualPlaylist(name string) error {
+	trimmed := strings.TrimSpace(name)
+	for i := range s.Playlists {
+		pl := s.Playlists[i]
+		if pl.Name != trimmed {
+			continue
+		}
+		if pl.Smart != nil || pl.Name == "Todos" {
+			return fmt.Errorf("playlist %q no admite edición manual", trimmed)
+		}
+		s.Playlists = append(s.Playlists[:i], s.Playlists[i+1:]...)
+		return nil
+	}
+	return fmt.Errorf("playlist %q no encontrada", trimmed)
+}
+
 func (s *Store) rebuildIndexes() {
 	artistsSet := map[string]struct{}{}
 	albumsSet := map[string]struct{}{}

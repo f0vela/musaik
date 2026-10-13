@@ -50,7 +50,15 @@ Implementado y funcional:
 
 - Go 1.27+
 - Mygo CLI (como tool de Go)
-- `ffplay` y `ffprobe` (incluidos en ffmpeg) para reproducción con progreso/seek.
+- `ffplay` y `ffprobe` para reproducción con progreso/seek.
+
+Musaik busca estos binarios en este orden:
+
+1. `PATH`
+2. `MUSAIK_FFMPEG_DIR` (si está definida)
+3. rutas embebidas/empacadas: `./bin`, `<ejecutable>/bin`, y en macOS app bundle `Contents/Resources/bin`
+
+Esto permite distribuir la app con `ffplay`/`ffprobe` incluidos, sin instalación global de ffmpeg.
 
 ## Desarrollo local
 

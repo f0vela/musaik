@@ -16,7 +16,7 @@ App de escritorio para macOS enfocada en:
 
 - UI: `github.com/egoist/mygo/ui`
 - App shell: `github.com/egoist/mygo`
-- Reproductor: `internal/player` (backend `ffplay` + `ffprobe`)
+- Reproductor: `internal/player` (backend `ffplay` + `ffprobe`, soporta binarios empacados en `bin/` o `Contents/Resources/bin`)
 - Biblioteca/indexado/persistencia: `internal/library`
 - Last.fm client: `internal/lastfm`
 - iPod classic (modo disco): `internal/ipod`

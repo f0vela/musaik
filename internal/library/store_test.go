@@ -97,6 +97,43 @@ func TestAddSongToManualPlaylist(t *testing.T) {
 	}
 }
 
+func TestRenameManualPlaylist(t *testing.T) {
+	s := NewStore()
+	s.AddManualPlaylist("Ruta", nil)
+
+	if err := s.RenameManualPlaylist("Ruta", "Ruta Nocturna"); err != nil {
+		t.Fatalf("unexpected rename error: %v", err)
+	}
+	if s.Playlists[len(s.Playlists)-1].Name != "Ruta Nocturna" {
+		t.Fatalf("expected playlist renamed, got %+v", s.Playlists[len(s.Playlists)-1])
+	}
+
+	if err := s.RenameManualPlaylist("Favoritos", "X"); err == nil {
+		t.Fatal("expected smart playlist rename to fail")
+	}
+	if err := s.RenameManualPlaylist("Ruta Nocturna", "Todos"); err == nil {
+		t.Fatal("expected duplicate rename to fail")
+	}
+}
+
+func TestDeleteManualPlaylist(t *testing.T) {
+	s := NewStore()
+	s.AddManualPlaylist("Temporal", nil)
+
+	if err := s.DeleteManualPlaylist("Temporal"); err != nil {
+		t.Fatalf("unexpected delete error: %v", err)
+	}
+	for _, pl := range s.Playlists {
+		if pl.Name == "Temporal" {
+			t.Fatal("expected playlist to be removed")
+		}
+	}
+
+	if err := s.DeleteManualPlaylist("Favoritos"); err == nil {
+		t.Fatal("expected smart playlist delete to fail")
+	}
+}
+
 func writeEmpty(path string) error {
 	return os.WriteFile(path, []byte(""), 0o644)
 }

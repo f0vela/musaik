@@ -192,6 +192,72 @@ func (c *Client) UserPlayCount(song model.Song) (int, error) {
 	return count, nil
 }
 
+func (c *Client) ArtistImageURL(artist string) (string, error) {
+	if c.APIKey == "" || strings.TrimSpace(artist) == "" {
+		return "", nil
+	}
+	v := url.Values{}
+	v.Set("method", "artist.getinfo")
+	v.Set("api_key", c.APIKey)
+	v.Set("artist", artist)
+	v.Set("autocorrect", "1")
+	v.Set("format", "json")
+
+	reqURL := apiURL + "?" + v.Encode()
+	resp, err := c.HTTP.Get(reqURL)
+	if err != nil {
+		return "", fmt.Errorf("request artist.getinfo: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read artist.getinfo response: %w", err)
+	}
+
+	var payload struct {
+		Error   int    `json:"error"`
+		Message string `json:"message"`
+		Artist  struct {
+			Image []struct {
+				URL  string `json:"#text"`
+				Size string `json:"size"`
+			} `json:"image"`
+		} `json:"artist"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", fmt.Errorf("decode artist.getinfo: %w", err)
+	}
+	if payload.Error != 0 {
+		return "", fmt.Errorf("last.fm error %d: %s", payload.Error, payload.Message)
+	}
+	if len(payload.Artist.Image) == 0 {
+		return "", nil
+	}
+
+	sizeRank := map[string]int{
+		"small":      1,
+		"medium":     2,
+		"large":      3,
+		"extralarge": 4,
+		"mega":       5,
+	}
+	bestURL := ""
+	bestRank := -1
+	for _, img := range payload.Artist.Image {
+		u := strings.TrimSpace(img.URL)
+		if u == "" {
+			continue
+		}
+		r := sizeRank[strings.ToLower(strings.TrimSpace(img.Size))]
+		if r > bestRank {
+			bestRank = r
+			bestURL = u
+		}
+	}
+	return bestURL, nil
+}
+
 func (c *Client) postSigned(params map[string]string) error {
 	v := url.Values{}
 	for k, val := range params {

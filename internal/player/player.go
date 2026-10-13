@@ -390,7 +390,7 @@ func (p *Player) positionLocked() time.Duration {
 func startBackend(ctx context.Context, path string, offset time.Duration, volume int, disableExec bool) (*exec.Cmd, io.WriteCloser, error) {
 	bin, err := findExecutable("ffplay")
 	if err != nil {
-		return nil, nil, errors.New("ffplay no está disponible (instala ffmpeg)")
+		return nil, nil, errors.New("ffplay no está disponible; incluye ffplay/ffprobe en bin/ o instala ffmpeg")
 	}
 	if volume < 0 {
 		volume = 0
@@ -453,11 +453,7 @@ func findExecutable(name string) (string, error) {
 		return path, nil
 	}
 
-	paths := []string{
-		filepath.Join("/opt/homebrew/bin", name),
-		filepath.Join("/usr/local/bin", name),
-		filepath.Join("/opt/local/bin", name),
-	}
+	paths := candidateExecutablePaths(name)
 	for _, p := range paths {
 		info, err := os.Stat(p)
 		if err != nil || info.IsDir() {
@@ -465,5 +461,30 @@ func findExecutable(name string) (string, error) {
 		}
 		return p, nil
 	}
-	return "", fmt.Errorf("%s not found", name)
+	return "", fmt.Errorf("%s not found in PATH or bundled locations", name)
+}
+
+func candidateExecutablePaths(name string) []string {
+	paths := make([]string, 0, 12)
+
+	if customDir := strings.TrimSpace(os.Getenv("MUSAIK_FFMPEG_DIR")); customDir != "" {
+		paths = append(paths, filepath.Join(customDir, name))
+	}
+
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		paths = append(paths,
+			filepath.Join(exeDir, name),
+			filepath.Join(exeDir, "bin", name),
+			filepath.Join(exeDir, "..", "Resources", "bin", name),
+		)
+	}
+
+	paths = append(paths,
+		filepath.Join(".", "bin", name),
+		filepath.Join("/opt/homebrew/bin", name),
+		filepath.Join("/usr/local/bin", name),
+		filepath.Join("/opt/local/bin", name),
+	)
+	return paths
 }
