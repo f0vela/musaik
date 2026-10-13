@@ -114,6 +114,7 @@ type app struct {
 	coverLRU          []string
 	sizeByID          map[string]int64
 	artistAvatars     map[string]*ui.Bitmap
+	artistAvatarLRU   []string
 	artistAvatarFetch map[string]bool
 
 	libraryTable ui.ListState
@@ -127,6 +128,8 @@ type app struct {
 	actionAddToPlaylistOpen   bool
 	actionAddSongID           string
 	actionAddPlaylistName     string
+	queueOpen                 bool
+	queueSongIDs              []string
 	playlistCreateOpen        bool
 	playlistCreateName        string
 	playlistCreateSeedSongID  string
@@ -213,6 +216,7 @@ func newApp() *app {
 		coverLRU:          []string{},
 		sizeByID:          map[string]int64{},
 		artistAvatars:     map[string]*ui.Bitmap{},
+		artistAvatarLRU:   []string{},
 		artistAvatarFetch: map[string]bool{},
 		lastfmAPIKey:      os.Getenv("LASTFM_API_KEY"),
 		lastfmAPISecret:   os.Getenv("LASTFM_API_SECRET"),
@@ -497,6 +501,7 @@ func (a *app) view(c *ui.Context) {
 	})
 	a.viewActionBar(c)
 	a.viewActionAddToPlaylistModal(c)
+	a.viewQueueModal(c)
 	a.viewPlaylistCreateModal(c)
 	a.viewPlaylistRenameModal(c)
 	a.viewPlaylistDeleteModal(c)
@@ -1264,6 +1269,15 @@ func (a *app) viewAlbumDetail(c *ui.Context, identity string) {
 						BorderWidth(0, 0, 1, 0).
 						BorderColor(sonoraBorder.Alpha(0.5))
 					row.ContextMenu(func(m *ui.Menu) {
+						queueItem := m.Item("Agregar a queue")
+						if queueItem.Chosen() {
+							if a.enqueueSong(songCopy.ID) {
+								a.status = fmt.Sprintf("%s agregado al queue", songCopy.Title)
+							} else {
+								a.status = "No se pudo agregar al queue"
+							}
+						}
+						m.Separator()
 						lastfmItem := m.Item("Actualizar conteo desde Last.fm")
 						lastfmItem.Disabled(a.lastfm == nil || !a.lastfm.Enabled())
 						if lastfmItem.Chosen() {
@@ -1447,11 +1461,11 @@ func (a *app) artistAvatarBitmap(artist string) *ui.Bitmap {
 	}
 
 	if bmp := loadArtistAvatarFromDisk(artist); bmp != nil {
-		a.artistAvatars[key] = bmp
+		a.cacheArtistAvatar(key, bmp)
 		return bmp
 	}
 
-	a.artistAvatars[key] = nil
+	a.cacheArtistAvatar(key, nil)
 	return nil
 }
 
@@ -1488,15 +1502,15 @@ func (a *app) fetchArtistAvatarAsync(artist, key string) {
 		if err != nil || len(data) == 0 {
 			return
 		}
-		bmp, err := ui.DecodeBitmap(data)
-		if err != nil || bmp == nil {
+		bmp := decodeArtistAvatarBitmap(data)
+		if bmp == nil {
 			return
 		}
 		if path, err := artistAvatarCachePath(artist); err == nil {
 			_ = os.WriteFile(path, data, 0o644)
 		}
 		a.updateUI(func() {
-			a.artistAvatars[key] = bmp
+			a.cacheArtistAvatar(key, bmp)
 		})
 	}(artist, key)
 }
@@ -1526,6 +1540,16 @@ func loadArtistAvatarFromDisk(artist string) *ui.Bitmap {
 	data, err := os.ReadFile(path)
 	if err != nil || len(data) == 0 {
 		return nil
+	}
+	return decodeArtistAvatarBitmap(data)
+}
+
+func decodeArtistAvatarBitmap(data []byte) *ui.Bitmap {
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err == nil && img != nil {
+		const maxAvatarSize = 128
+		scaled := downscaleImage(img, maxAvatarSize)
+		return ui.NewBitmap(scaled)
 	}
 	bmp, err := ui.DecodeBitmap(data)
 	if err != nil {
@@ -1704,6 +1728,15 @@ func (a *app) viewArtistDetail(c *ui.Context, artist string) {
 						}
 						row := ui.Row(c).Height(44).Padding(9, 12).AlignItems(ui.Center).Background(rowBG).BorderWidth(0, 0, 1, 0).BorderColor(sonoraBorder.Alpha(0.5))
 						row.ContextMenu(func(m *ui.Menu) {
+							queueItem := m.Item("Agregar a queue")
+							if queueItem.Chosen() {
+								if a.enqueueSong(songCopy.ID) {
+									a.status = fmt.Sprintf("%s agregado al queue", songCopy.Title)
+								} else {
+									a.status = "No se pudo agregar al queue"
+								}
+							}
+							m.Separator()
 							lastfmItem := m.Item("Actualizar conteo desde Last.fm")
 							lastfmItem.Disabled(a.lastfm == nil || !a.lastfm.Enabled())
 							if lastfmItem.Chosen() {
@@ -2426,6 +2459,82 @@ func (a *app) viewActionAddToPlaylistModal(c *ui.Context) {
 	})
 }
 
+func (a *app) viewQueueModal(c *ui.Context) {
+	ui.Modal(c, &a.queueOpen, func() {
+		current, hasCurrent := a.currentPlayingSong()
+		upcoming := a.queuedSongs()
+		sourceLabel := "Queue manual"
+		if len(upcoming) == 0 {
+			upcoming = a.naturalUpcomingSongs(25)
+			if a.shuffle {
+				sourceLabel = "Shuffle activo (siguientes impredecibles)"
+			} else {
+				sourceLabel = "Siguientes por orden actual"
+			}
+		}
+		ui.Column(c).
+			Width(560).
+			Height(460).
+			Padding(14, 14).
+			Gap(10).
+			Background(sonoraCardAlt).
+			Border(1, sonoraBorder).
+			Radius(12).
+			Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "Queue").FontSize(18).FontWeight(700).TextColor(sonoraText)
+					ui.Spacer(c)
+					if ui.Button(c, "Limpiar siguientes").Disabled(len(a.queueSongIDs) == 0).Clicked() {
+						a.queueSongIDs = nil
+						a.status = "Queue limpiado"
+					}
+				})
+				ui.Text(c, "Actual y siguientes canciones · "+sourceLabel).FontSize(12).TextColor(sonoraTextMuted)
+				ui.Box(c).Grow(1).Children(func() {
+					ui.Scroll(c.Key("queue-scroll")).Fill().Children(func() {
+						if hasCurrent {
+							ui.Row(c).Padding(8, 10).Gap(8).Background(adaptiveOverlay(c, 0.05, 0.04)).Border(1, sonoraBorder).Radius(8).Children(func() {
+								ui.Text(c, "●").TextColor(ui.Hex("#1E6FE8"))
+								ui.Column(c).Grow(1).Gap(2).Children(func() {
+									ui.Text(c, current.Title).SingleLine().TextColor(sonoraText)
+									ui.Text(c, fmt.Sprintf("%s • %s", current.Artist, current.Album)).SingleLine().FontSize(12).TextColor(sonoraTextMuted)
+								})
+								ui.Text(c, "Actual").FontSize(11).TextColor(sonoraTextTertiary)
+							})
+						} else {
+							ui.Row(c).Padding(8, 10).Gap(8).Background(adaptiveOverlay(c, 0.05, 0.04)).Border(1, sonoraBorder).Radius(8).Children(func() {
+								ui.Text(c, "Sin reproducción actual").TextColor(sonoraTextMuted)
+							})
+						}
+
+						ui.Box(c).Height(8)
+						if len(upcoming) == 0 {
+							ui.Row(c).Padding(8, 10).Background(adaptiveOverlay(c, 0.03, 0.03)).Border(1, sonoraBorder).Radius(8).Children(func() {
+								ui.Text(c, "No hay canciones siguientes. Usa clic derecho en una canción → Agregar a queue.").TextColor(sonoraTextMuted)
+							})
+							return
+						}
+						for i, song := range upcoming {
+							songCopy := song
+							idx := i + 1
+							row := ui.Row(c).Padding(8, 10).Gap(8).Background(adaptiveOverlay(c, 0.03, 0.03)).Border(1, sonoraBorder).Radius(8)
+							if row.Hovered() {
+								row.Background(adaptiveOverlay(c, 0.06, 0.05))
+							}
+							row.Children(func() {
+								ui.Textf(c, "%d", idx).Width(22).Font("monospace").TextColor(sonoraTextMuted)
+								ui.Column(c).Grow(1).Gap(2).Children(func() {
+									ui.Text(c, songCopy.Title).SingleLine().TextColor(sonoraText)
+									ui.Text(c, fmt.Sprintf("%s • %s", songCopy.Artist, songCopy.Album)).SingleLine().FontSize(12).TextColor(sonoraTextMuted)
+								})
+							})
+						}
+					})
+				})
+			})
+	})
+}
+
 func (a *app) viewPlaylistCreateModal(c *ui.Context) {
 	ui.Modal(c, &a.playlistCreateOpen, func() {
 		ui.Column(c).
@@ -2616,6 +2725,9 @@ func (a *app) indexLibrary() {
 	}
 	a.covers = map[string]*ui.Bitmap{}
 	a.coverLRU = nil
+	a.artistAvatars = map[string]*ui.Bitmap{}
+	a.artistAvatarLRU = nil
+	a.artistAvatarFetch = map[string]bool{}
 	a.sizeByID = map[string]int64{}
 	a.status = fmt.Sprintf("Indexadas %d canciones", len(a.store.Songs))
 	if len(a.store.Songs) > 0 {
@@ -2869,6 +2981,15 @@ func (a *app) viewSongs(c *ui.Context, songs []model.Song) {
 				row = row.Drag(&draggedSong{SongID: songCopy.ID})
 				row.ContextMenu(func(m *ui.Menu) {
 					selectedSong := songCopy
+					queueItem := m.Item("Agregar a queue")
+					if queueItem.Chosen() {
+						if a.enqueueSong(selectedSong.ID) {
+							a.status = fmt.Sprintf("%s agregado al queue", selectedSong.Title)
+						} else {
+							a.status = "No se pudo agregar al queue"
+						}
+					}
+					m.Separator()
 					menuPlaylist := m.Submenu("Agregar a playlist", func(pm *ui.Menu) {
 						anyManual := false
 						for _, pl := range a.store.Playlists {
@@ -3072,6 +3193,21 @@ func (a *app) cacheCover(key string, bmp *ui.Bitmap) {
 	delete(a.covers, evict)
 }
 
+func (a *app) cacheArtistAvatar(key string, bmp *ui.Bitmap) {
+	if _, ok := a.artistAvatars[key]; ok {
+		return
+	}
+	a.artistAvatars[key] = bmp
+	a.artistAvatarLRU = append(a.artistAvatarLRU, key)
+	const maxArtistAvatars = 48
+	if len(a.artistAvatarLRU) <= maxArtistAvatars {
+		return
+	}
+	evict := a.artistAvatarLRU[0]
+	a.artistAvatarLRU = a.artistAvatarLRU[1:]
+	delete(a.artistAvatars, evict)
+}
+
 func (a *app) cycleRepeatMode() {
 	switch a.repeatMode {
 	case repeatModeOff:
@@ -3234,6 +3370,17 @@ func (a *app) viewControls(c *ui.Context) {
 						a.cycleRepeatMode()
 						_ = a.saveSettings()
 					}
+
+					queueBG := ui.Transparent
+					if a.queueOpen {
+						queueBG = adaptiveOverlay(c, 0.12, 0.10)
+					}
+					queueBtn := ui.Button(c, "").Width(24).Height(24).Padding(0, 0).Radius(12).Background(queueBG).TextColor(sonoraTextMuted).Children(func() {
+						drawCenteredButtonIcon(c, iconBell, 13)
+					})
+					if queueBtn.Clicked() {
+						a.queueOpen = !a.queueOpen
+					}
 				})
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, formatDuration(position)).Font("monospace").FontSize(12).TextColor(sonoraTextMuted)
@@ -3336,6 +3483,59 @@ func (a *app) selectedSongForMenu(songs []model.Song, selected int) (model.Song,
 		}
 	}
 	return model.Song{}, false
+}
+
+func (a *app) enqueueSong(songID string) bool {
+	if strings.TrimSpace(songID) == "" {
+		return false
+	}
+	if _, _, ok := a.findSong(songID); !ok {
+		return false
+	}
+	a.queueSongIDs = append(a.queueSongIDs, songID)
+	return true
+}
+
+func (a *app) dequeueNextQueuedSong() (model.Song, bool) {
+	for len(a.queueSongIDs) > 0 {
+		nextID := a.queueSongIDs[0]
+		a.queueSongIDs = a.queueSongIDs[1:]
+		_, song, ok := a.findSong(nextID)
+		if ok {
+			return song, true
+		}
+	}
+	return model.Song{}, false
+}
+
+func (a *app) queuedSongs() []model.Song {
+	out := make([]model.Song, 0, len(a.queueSongIDs))
+	for _, id := range a.queueSongIDs {
+		_, song, ok := a.findSong(id)
+		if ok {
+			out = append(out, song)
+		}
+	}
+	return out
+}
+
+func (a *app) naturalUpcomingSongs(limit int) []model.Song {
+	if limit <= 0 || len(a.store.Songs) == 0 || a.playIndex < 0 || a.playIndex >= len(a.store.Songs) {
+		return nil
+	}
+	if a.shuffle {
+		return nil
+	}
+	out := make([]model.Song, 0, limit)
+	for i := a.playIndex + 1; i < len(a.store.Songs) && len(out) < limit; i++ {
+		out = append(out, a.store.Songs[i])
+	}
+	if a.repeatMode == repeatModeAll {
+		for i := 0; i <= a.playIndex && len(out) < limit; i++ {
+			out = append(out, a.store.Songs[i])
+		}
+	}
+	return out
 }
 
 func (a *app) syncSongPlayCountFromLastFM(song model.Song) {
@@ -3458,6 +3658,12 @@ func (a *app) playNextFromAutoEnd() {
 		a.status = "Reproducción finalizada"
 		return
 	}
+	if queuedSong, ok := a.dequeueNextQueuedSong(); ok {
+		if idx, _, found := a.findSong(queuedSong.ID); found {
+			a.playSongAt(idx, queuedSong)
+			return
+		}
+	}
 	if a.repeatMode == repeatModeOne {
 		song := a.store.Songs[a.playIndex]
 		a.playSongAt(a.playIndex, song)
@@ -3539,6 +3745,12 @@ func (a *app) playPrevious() {
 func (a *app) playNext() {
 	if len(a.store.Songs) == 0 {
 		return
+	}
+	if queuedSong, ok := a.dequeueNextQueuedSong(); ok {
+		if idx, _, found := a.findSong(queuedSong.ID); found {
+			a.playSongAt(idx, queuedSong)
+			return
+		}
 	}
 	if a.shuffle {
 		a.playIndex = int(time.Now().UnixNano() % int64(len(a.store.Songs)))
