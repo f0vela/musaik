@@ -145,8 +145,13 @@ func (c *Client) LoveTrack(song model.Song) error {
 }
 
 func (c *Client) UserPlayCount(song model.Song) (int, error) {
+	count, _, err := c.UserTrackInfo(song)
+	return count, err
+}
+
+func (c *Client) UserTrackInfo(song model.Song) (playCount int, loved bool, err error) {
 	if c.APIKey == "" || c.Username == "" {
-		return 0, nil
+		return 0, false, nil
 	}
 	v := url.Values{}
 	v.Set("method", "track.getInfo")
@@ -159,13 +164,13 @@ func (c *Client) UserPlayCount(song model.Song) (int, error) {
 	reqURL := apiURL + "?" + v.Encode()
 	resp, err := c.HTTP.Get(reqURL)
 	if err != nil {
-		return 0, fmt.Errorf("request track.getInfo: %w", err)
+		return 0, false, fmt.Errorf("request track.getInfo: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, fmt.Errorf("read track.getInfo response: %w", err)
+		return 0, false, fmt.Errorf("read track.getInfo response: %w", err)
 	}
 
 	var payload struct {
@@ -173,23 +178,24 @@ func (c *Client) UserPlayCount(song model.Song) (int, error) {
 		Message string `json:"message"`
 		Track   struct {
 			UserPlaycount string `json:"userplaycount"`
+			UserLoved     string `json:"userloved"`
 		} `json:"track"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return 0, fmt.Errorf("decode track.getInfo: %w", err)
+		return 0, false, fmt.Errorf("decode track.getInfo: %w", err)
 	}
 	if payload.Error != 0 {
-		return 0, fmt.Errorf("last.fm error %d: %s", payload.Error, payload.Message)
+		return 0, false, fmt.Errorf("last.fm error %d: %s", payload.Error, payload.Message)
 	}
 
-	if payload.Track.UserPlaycount == "" {
-		return 0, nil
+	if strings.TrimSpace(payload.Track.UserPlaycount) == "" {
+		return 0, payload.Track.UserLoved == "1", nil
 	}
 	count, err := strconv.Atoi(payload.Track.UserPlaycount)
 	if err != nil {
-		return 0, fmt.Errorf("parse userplaycount: %w", err)
+		return 0, false, fmt.Errorf("parse userplaycount: %w", err)
 	}
-	return count, nil
+	return count, payload.Track.UserLoved == "1", nil
 }
 
 func (c *Client) ArtistImageURL(artist string) (string, error) {
