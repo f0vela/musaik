@@ -117,6 +117,29 @@ En **Ajustes**:
 
 Nota: la exportación actual no reescribe `iTunesDB`; según firmware/flujo del iPod puede requerir gestor externo para reflejar biblioteca Apple nativa.
 
+## Profiling de memoria (RAM)
+
+Puedes habilitar instrumentación de memoria y pprof para medir uso de RAM durante reproducción.
+
+Variables opcionales:
+
+```bash
+export MUSAIK_ENABLE_PPROF=1
+export MUSAIK_PPROF_ADDR="127.0.0.1:6060"   # opcional, default 127.0.0.1:6060
+export MUSAIK_PROFILE_LOG="/tmp/musaik-mem.csv"
+export MUSAIK_PROFILE_INTERVAL_MS=1000       # opcional, mínimo 250ms
+```
+
+Con eso, Musaik:
+
+- expone `http://127.0.0.1:6060/debug/pprof/`
+- escribe CSV con muestras por intervalo:
+  - `heap_alloc_mb`
+  - `heap_sys_mb`
+  - `rss_app_mb`
+  - `rss_player_mb` (proceso `ffplay`)
+  - `rss_total_mb` (app + backend)
+
 ## Pendientes
 
 Los pendientes y próximos pasos están documentados en [`todo.md`](./todo.md).

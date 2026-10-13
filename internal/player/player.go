@@ -278,6 +278,15 @@ func (p *Player) Events() <-chan Event {
 	return p.events
 }
 
+func (p *Player) BackendPID() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.cmd == nil || p.cmd.Process == nil {
+		return 0
+	}
+	return p.cmd.Process.Pid
+}
+
 func (p *Player) Volume() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()

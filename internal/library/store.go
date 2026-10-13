@@ -133,6 +133,7 @@ func (s *Store) AddManualPlaylist(name string, songIDs []string) {
 	ids := slices.Clone(songIDs)
 	s.Playlists = append(s.Playlists, model.Playlist{
 		Name:       name,
+		Color:      "",
 		ManualSong: ids,
 	})
 }
@@ -239,6 +240,22 @@ func (s *Store) DeleteManualPlaylist(name string) error {
 			return fmt.Errorf("playlist %q no admite edición manual", trimmed)
 		}
 		s.Playlists = append(s.Playlists[:i], s.Playlists[i+1:]...)
+		return nil
+	}
+	return fmt.Errorf("playlist %q no encontrada", trimmed)
+}
+
+func (s *Store) SetManualPlaylistColor(name, color string) error {
+	trimmed := strings.TrimSpace(name)
+	for i := range s.Playlists {
+		pl := s.Playlists[i]
+		if pl.Name != trimmed {
+			continue
+		}
+		if pl.Smart != nil || pl.Name == "Todos" {
+			return fmt.Errorf("playlist %q no admite edición manual", trimmed)
+		}
+		s.Playlists[i].Color = strings.TrimSpace(color)
 		return nil
 	}
 	return fmt.Errorf("playlist %q no encontrada", trimmed)

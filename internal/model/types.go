@@ -24,6 +24,7 @@ type SmartPlaylistFilter struct {
 
 type Playlist struct {
 	Name       string
+	Color      string
 	ManualSong []string
 	Smart      *SmartPlaylistFilter
 }

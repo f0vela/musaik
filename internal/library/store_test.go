@@ -134,6 +134,22 @@ func TestDeleteManualPlaylist(t *testing.T) {
 	}
 }
 
+func TestSetManualPlaylistColor(t *testing.T) {
+	s := NewStore()
+	s.AddManualPlaylist("Ruta", nil)
+
+	if err := s.SetManualPlaylistColor("Ruta", "purple"); err != nil {
+		t.Fatalf("unexpected color update error: %v", err)
+	}
+	if got := s.Playlists[len(s.Playlists)-1].Color; got != "purple" {
+		t.Fatalf("expected playlist color purple, got %q", got)
+	}
+
+	if err := s.SetManualPlaylistColor("Favoritos", "yellow"); err == nil {
+		t.Fatal("expected smart playlist color update to fail")
+	}
+}
+
 func writeEmpty(path string) error {
 	return os.WriteFile(path, []byte(""), 0o644)
 }
