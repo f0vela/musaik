@@ -490,6 +490,15 @@ func (a *app) updateUI(fn func()) {
 func (a *app) view(c *ui.Context) {
 	a.applyTheme(c)
 	a.consumePlayerEvents()
+	c.OnShortcut(0, ui.KeyF8, func() {
+		a.togglePlayPause()
+	})
+	c.OnShortcut(0, ui.KeyF9, func() {
+		a.playNext()
+	})
+	c.OnShortcut(0, ui.KeyF7, func() {
+		a.playPrevious()
+	})
 	c.OnShortcut(ui.Cmd, ui.KeyP, func() {
 		a.actionOpen = !a.actionOpen
 		if a.actionOpen {
@@ -2352,6 +2361,7 @@ func (a *app) applyQuickAction(actionID string) {
 			a.status = "No se pudo pausar: " + err.Error()
 			return
 		}
+		a.updateNowPlaying()
 		a.status = "Reproducción pausada"
 	case "next":
 		a.playNext()
@@ -2359,6 +2369,7 @@ func (a *app) applyQuickAction(actionID string) {
 		a.playPrevious()
 	case "stop":
 		a.player.Stop()
+		a.clearNowPlaying()
 		a.status = "Reproducción detenida"
 	case "create-playlist":
 		a.playlistCreateOpen = true
@@ -3717,13 +3728,7 @@ func (a *app) viewControls(c *ui.Context) {
 						drawCenteredButtonIcon(c, playIcon, 14)
 					})
 					if playBtn.Clicked() {
-						if state.Playing {
-							if err := a.player.TogglePause(); err != nil {
-								a.status = "No se puede pausar/reanudar: " + err.Error()
-							}
-						} else {
-							a.playSelectedOrFirst()
-						}
+						a.togglePlayPause()
 					}
 
 					nextBtn := ui.Button(c, "").Width(24).Height(24).Padding(0, 0).Radius(12).Background(ui.Transparent).TextColor(sonoraTextMuted).Children(func() {
@@ -3761,6 +3766,8 @@ func (a *app) viewControls(c *ui.Context) {
 						if ui.Slider(c.Key("progress"), &a.sliderAt, 0, duration.Seconds()).Step(1).Grow(1).Changed() {
 							if err := a.player.SeekTo(time.Duration(a.sliderAt * float64(time.Second))); err != nil {
 								a.status = "No se pudo mover la canción: " + err.Error()
+							} else {
+								a.updateNowPlaying()
 							}
 						}
 					} else {
@@ -3842,6 +3849,18 @@ func (a *app) playSongByID(songID string) {
 		return
 	}
 	a.playSongAt(index, song)
+}
+
+func (a *app) togglePlayPause() {
+	state := a.player.State()
+	if state.Playing {
+		if err := a.player.TogglePause(); err != nil {
+			a.status = "No se puede pausar/reanudar: " + err.Error()
+		}
+		a.updateNowPlaying()
+		return
+	}
+	a.playSelectedOrFirst()
 }
 
 func (a *app) playSelectedOrFirst() {
@@ -4130,9 +4149,14 @@ func (a *app) startUIHeartbeat() {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	go func() {
 		defer ticker.Stop()
+		ticks := 0
 		for range ticker.C {
+			ticks++
 			if a.window != nil {
 				a.window.Invalidate()
+			}
+			if ticks%10 == 0 && np.available && a.player.State().Playing {
+				a.updateUI(a.updateNowPlaying)
 			}
 		}
 	}()
@@ -4159,9 +4183,17 @@ func (a *app) playSongAt(index int, song model.Song) {
 		a.status = "Reproduciendo (Last.fm falló): " + err.Error()
 	}
 
-	go func(song model.Song) {
-		_ = a.lastfm.Scrobble(song, time.Now().Add(-10*time.Second))
-	}(song)
+	startedAt := time.Now()
+	go func(song model.Song, startedAt time.Time) {
+		time.Sleep(15 * time.Second)
+		state := a.player.State()
+		if !state.Playing || state.Path != song.Path {
+			return
+		}
+		_ = a.lastfm.Scrobble(song, startedAt)
+	}(song, startedAt)
+
+	a.updateNowPlaying()
 }
 
 func (a *app) playPrevious() {
@@ -4299,10 +4331,67 @@ var execCommand = func(name string, arg ...string) ([]byte, error) {
 	return exec.Command(name, arg...).Output()
 }
 
+func (a *app) registerMediaShortcut(action string, fn func(), candidates ...string) {
+	for _, acc := range candidates {
+		if err := mygo.GlobalShortcut.Register(acc, fn); err == nil {
+			log.Printf("media key %s registrada como %s", action, acc)
+			return
+		}
+	}
+	log.Printf("no se pudo registrar media key %s (intentos: %s)", action, strings.Join(candidates, ", "))
+}
+
+func (a *app) registerMediaKeyShortcuts() {
+	bindings := []struct {
+		action string
+		acc    []string
+		fn     func()
+	}{
+		{
+			action: "play-pause",
+			acc:    []string{"MediaPlayPause", "F8"},
+			fn: func() {
+				a.updateUI(func() {
+					a.togglePlayPause()
+				})
+			},
+		},
+		{
+			action: "next",
+			acc:    []string{"MediaNextTrack", "F9"},
+			fn: func() {
+				a.updateUI(func() {
+					a.playNext()
+				})
+			},
+		},
+		{
+			action: "previous",
+			acc:    []string{"MediaPreviousTrack", "F7"},
+			fn: func() {
+				a.updateUI(func() {
+					a.playPrevious()
+				})
+			},
+		},
+	}
+	for _, b := range bindings {
+		a.registerMediaShortcut(b.action, b.fn, b.acc...)
+	}
+}
+
 func main() {
 	a := newApp()
 	startDiagnostics(a)
 	mygo.App.WhenReady(func() {
+		if a.setupNowPlaying() {
+			log.Printf("nowplaying: integración con macOS activa")
+		} else {
+			a.registerMediaKeyShortcuts()
+		}
+		mygo.App.OnWillQuit(func(e *mygo.QuitEvent) {
+			mygo.GlobalShortcut.UnregisterAll()
+		})
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:          "Musaik",
 			Width:          1100,
@@ -4316,8 +4405,12 @@ func main() {
 			Content:        ui.View(a.view),
 		})
 		a.window = win
+		if os.Getenv("MUSAIK_AUTOPLAY") != "" && len(a.store.Songs) > 0 {
+			a.playSongAt(0, a.store.Songs[0])
+		}
 		win.OnClose(func(e *mygo.CloseEvent) {
 			a.player.Stop()
+			a.clearNowPlaying()
 			a.persistAll()
 		})
 		win.OnClosed(func() {
