@@ -2,6 +2,12 @@
 
 Musaik es una app de escritorio **nativa para macOS** (Go + Mygo) para reproducción de música local con biblioteca, playlists, queue y controles estilo app de audio moderna.
 
+## Screenshots
+
+![Songs View](screens/songs_view.png)
+![Action Bar](screens/action_bar.png)
+![Album View](screens/album_view.png)
+
 ## Funcionalidades principales
 
 - Biblioteca local con indexado recursivo para `mp3`, `mp4`, `flac`, `ogg`.

@@ -1,0 +1,23 @@
+[
+  {
+    "file_extension": "3PM",
+    "bitrate_kbps": 0,
+    "sample_rate_hz": 44100,
+    "file_size_bytes": 4096,
+    "file_size_friendly": "4.10 KB",
+    "song_duration_s": 180,
+    "song_duration_friendly": "3 minutes",
+    "num_plays": 5,
+    "song_rating_raw": 0,
+    "song_added_to_library_epoch": 3875017657,
+    "song_added_to_library_ts": "2026-10-16T17:47:37Z",
+    "song_year": 0,
+    "song_title": "Canción de Bolsillo",
+    "song_artist": "Telecast",
+    "song_composer": "",
+    "song_album": "The Beauty Of Simplicity",
+    "song_genre": "",
+    "song_comment": "",
+    "song_filename": ":/iPod_Control/Music/F02/Telecast-Canción de Bolsillo.mp3"
+  }
+]
