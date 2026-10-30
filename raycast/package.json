@@ -1,0 +1,74 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "musaik",
+  "title": "Musaik",
+  "description": "Control Musaik from your launcher: now playing, search, play/pause, next, previous, like and queue.",
+  "icon": "icon.png",
+  "author": "fvelasquez",
+  "license": "MIT",
+  "platforms": ["macOS"],
+  "categories": ["Media"],
+  "commands": [
+    {
+      "name": "now-playing",
+      "title": "Now Playing",
+      "subtitle": "Musaik",
+      "description": "Show the current track with playback controls.",
+      "mode": "view"
+    },
+    {
+      "name": "search-songs",
+      "title": "Search Songs",
+      "subtitle": "Musaik",
+      "description": "Search your library and play or queue a song.",
+      "mode": "view"
+    },
+    {
+      "name": "queue",
+      "title": "Show Queue",
+      "subtitle": "Musaik",
+      "description": "List the songs queued to play next.",
+      "mode": "view"
+    },
+    {
+      "name": "play-pause",
+      "title": "Play / Pause",
+      "subtitle": "Musaik",
+      "description": "Toggle playback.",
+      "mode": "no-view"
+    },
+    {
+      "name": "next-track",
+      "title": "Next Track",
+      "subtitle": "Musaik",
+      "description": "Skip to the next track.",
+      "mode": "no-view"
+    },
+    {
+      "name": "previous-track",
+      "title": "Previous Track",
+      "subtitle": "Musaik",
+      "description": "Go back to the previous track.",
+      "mode": "no-view"
+    },
+    {
+      "name": "like-current",
+      "title": "Like Current Song",
+      "subtitle": "Musaik",
+      "description": "Toggle the like on the song that is playing.",
+      "mode": "no-view"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.104.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.8.0"
+  },
+  "scripts": {
+    "build": "ray build -e dist -o dist",
+    "dev": "ray develop"
+  }
+}
