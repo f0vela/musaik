@@ -181,6 +181,9 @@ type app struct {
 	ipodSyncBusy     bool
 	ipodDeviceName   string
 	ipodDetected     bool
+
+	remoteEnabled bool
+	remote        *remoteServer
 }
 
 type draggedSong struct {
@@ -210,6 +213,7 @@ type appSettings struct {
 	LastFMUsername   string `json:"lastfm_username"`
 	IPodMountPath    string `json:"ipod_mount_path"`
 	IPodPlaylistName string `json:"ipod_playlist_name"`
+	RemoteControl    bool   `json:"remote_control"`
 }
 
 func newApp() *app {
@@ -329,6 +333,7 @@ func (a *app) saveSettings() error {
 		LastFMUsername:   a.lastfmUsername,
 		IPodMountPath:    a.ipodMountPath,
 		IPodPlaylistName: a.ipodPlaylistName,
+		RemoteControl:    a.remoteEnabled,
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -390,6 +395,7 @@ func (a *app) loadSettings() error {
 	if s.IPodPlaylistName != "" {
 		a.ipodPlaylistName = s.IPodPlaylistName
 	}
+	a.remoteEnabled = s.RemoteControl
 	return nil
 }
 
@@ -2186,6 +2192,17 @@ func (a *app) viewSettingsIntegrations(c *ui.Context, playlistOptions []string) 
 					a.startLastFMAutoConnect()
 				}
 			})
+		})
+
+		settingsPanel(c, "Control externo", func() {
+			ui.Text(c, "API local en 127.0.0.1 para controlar Musaik desde Raycast. Desactivada por defecto.").FontSize(12).TextColor(sonoraTextMuted)
+			on := a.remoteEnabled
+			if ui.Checkbox(c, &on, "Permitir control externo").Changed() {
+				a.setRemoteEnabled(on)
+			}
+			if a.remote != nil {
+				ui.Textf(c, "Activo en 127.0.0.1:%d", a.remote.port).FontSize(11).TextColor(sonoraTextMuted)
+			}
 		})
 
 		settingsPanel(c, "iPod Classic", func() {
@@ -4568,6 +4585,7 @@ func main() {
 		}
 		mygo.App.OnWillQuit(func(e *mygo.QuitEvent) {
 			mygo.GlobalShortcut.UnregisterAll()
+			a.stopRemote()
 		})
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:          "Musaik",
@@ -4594,6 +4612,7 @@ func main() {
 			a.player.Stop()
 		})
 		a.startUIHeartbeat()
+		a.applyRemoteControl()
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
