@@ -56,7 +56,17 @@ type sideEntry struct {
 	count int
 }
 
+// sideEntries lists the sidebar rows. Their counts walk the library, so the list
+// is kept until something changes (refresh drops it) instead of being rebuilt
+// by every frame, which asks for it several times.
 func (t *tui) sideEntries() []sideEntry {
+	if t.sideCache == nil {
+		t.sideCache = t.buildSideEntries()
+	}
+	return t.sideCache
+}
+
+func (t *tui) buildSideEntries() []sideEntry {
 	e := t.eng
 	out := []sideEntry{
 		{kind: "head", label: "BIBLIOTECA"},
@@ -80,13 +90,14 @@ func (t *tui) sideEntries() []sideEntry {
 }
 
 func (t *tui) sideSelectable() []sideEntry {
-	var out []sideEntry
-	for _, e := range t.sideEntries() {
-		if e.kind != "head" {
-			out = append(out, e)
+	if t.sideSel == nil {
+		for _, e := range t.sideEntries() {
+			if e.kind != "head" {
+				t.sideSel = append(t.sideSel, e)
+			}
 		}
 	}
-	return out
+	return t.sideSel
 }
 
 // isCurrent tells whether the entry is the view on screen.

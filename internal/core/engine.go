@@ -79,6 +79,7 @@ type Engine struct {
 	Post func(fn func())
 
 	goingBack  bool
+	songIdx    map[string]int
 	sizeCache  map[string]int64
 	dirty      bool
 	dirtySince time.Time
@@ -220,9 +221,22 @@ func (e *Engine) FlushIfDirty(force bool) {
 
 // ---- songs ------------------------------------------------------------------
 
-// FindSong looks a song up by ID and returns its index in the library.
+// FindSong looks a song up by ID and returns its index in the library. It goes
+// through an index of the IDs, rebuilt when the library changes; a hit is checked
+// against the song itself and a miss falls back to a scan, so a stale index can
+// slow a lookup down but never make it wrong.
 func (e *Engine) FindSong(id string) (int, model.Song, bool) {
-	for i, s := range e.Store.Songs {
+	songs := e.Store.Songs
+	if len(e.songIdx) != len(songs) {
+		e.songIdx = make(map[string]int, len(songs))
+		for i, s := range songs {
+			e.songIdx[s.ID] = i
+		}
+	}
+	if i, ok := e.songIdx[id]; ok && i < len(songs) && songs[i].ID == id {
+		return i, songs[i], true
+	}
+	for i, s := range songs {
 		if s.ID == id {
 			return i, s, true
 		}
@@ -430,21 +444,30 @@ func (e *Engine) Previous() {
 	e.PlaySongAt(e.PlayIndex, e.Store.Songs[e.PlayIndex])
 }
 
+// HandleEvent reacts to one thing the player reported: when a track ended, it
+// moves on to the next. A caller that waits on Player.Events itself uses this to
+// react at once instead of polling ConsumePlayerEvents.
+func (e *Engine) HandleEvent(ev player.Event) {
+	if ev.Type != player.EventTrackEnded {
+		return
+	}
+	if ev.Err != nil && !strings.Contains(ev.Err.Error(), "signal: killed") {
+		e.Status = "Error de reproducción: " + ev.Err.Error()
+		return
+	}
+	e.autoAdvance()
+}
+
 // ConsumePlayerEvents handles what the player reported since the last call,
-// moving on when a track ended. Call it often.
+// moving on when a track ended.
 func (e *Engine) ConsumePlayerEvents() {
 	for {
 		select {
 		case ev := <-e.Player.Events():
-			if ev.Type != player.EventTrackEnded {
-				continue
-			}
-			if ev.Err != nil && !strings.Contains(ev.Err.Error(), "signal: killed") {
-				e.Status = "Error de reproducción: " + ev.Err.Error()
+			if ev.Type == player.EventTrackEnded {
+				e.HandleEvent(ev)
 				return
 			}
-			e.autoAdvance()
-			return
 		default:
 			return
 		}

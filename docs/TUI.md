@@ -152,6 +152,46 @@ vuelve a su goroutine con `Engine.Post`, así que no hay locks ni carreras (`go 
 | `I` | iPod: detectar / sincronizar |
 | `q` | salir |
 
+## Rendimiento
+
+Medido con una biblioteca de ~3600 canciones y una terminal de 130×40, sobre un núcleo (macOS, arm64):
+
+| | antes | ahora |
+|---|---|---|
+| CPU en reposo | 9,2 % | **0,4 %** |
+| CPU reproduciendo (app + `ffplay`) | 11,1 % | **2,5 %** (1,6 es de `ffplay`) |
+| CPU desplazando con una tecla sostenida | 32,6 % | **9,5 %** |
+| Coste de dibujar un frame | 5,3 ms, 14 MB de basura | **0,45 ms, 122 KB** |
+| Memoria con portadas de 3000 px (pico) | 95 MB bloques · 235 MB kitty | **50 MB · 100 MB** |
+
+Qué lo explica:
+
+- **Un contador por playlist en cada frame.** La barra lateral reconstruía las playlists (un mapa de las 3600
+  canciones cada una) varias veces por frame: el 83 % del coste. Ahora se calcula una vez y se invalida cuando
+  algo cambia. Lo mismo con los totales de la biblioteca.
+- **Redibujar sin que nada cambie.** Antes había un reloj de 4 Hz que reconstruía la pantalla entera siempre.
+  Ahora el reloj solo late cada 0,5 s mientras suena algo (cada 1 s en reposo), y un frame se reutiliza si el
+  tick no movió el reloj, la canción ni el estado. Cualquier tecla, clic o evento sí lo reconstruye.
+- **El fin de pista llega como mensaje**, no preguntando cada 250 ms: la siguiente canción arranca al instante.
+- **La barra de progreso se pintaba celda a celda** con un estilo cada una; ahora son secuencias de color en tandas.
+- **El tamaño total de la biblioteca se suma en segundo plano** (un `stat` por canción) para no frenar el arranque.
+- **Memoria:** decodificar una portada de 3000 px son decenas de MB que se descartan al instante; se devuelven al sistema
+  justo después, y la caché de portadas guarda 12 en vez de 40. Las búsquedas de canción por ID usan un índice.
+- Renderizado limitado a 30 fps.
+
+Lo que no se puede bajar desde aquí: `ffplay` pesa ~30 MB y ~1,6 % de CPU mientras suena, igual que en la app de
+escritorio (probé `-vn` y `-nostats`: sin efecto medible). El pico con portadas enormes lo marca el decodificador
+JPEG de la biblioteca estándar, que no puede decodificar a tamaño reducido.
+
+Para medir tú mismo:
+
+```bash
+# coste por frame de cada vista (con una biblioteca real: HOME apunta a una copia)
+MUSAIK_BENCH_HOME=/ruta/a/un/home go test ./cmd/musaik-tui -run '^$' -bench . -benchmem
+# heap en vivo de una sesión: kill -USR1 <pid> escribe el perfil
+MUSAIK_HEAP_PROFILE=/tmp/heap.prof ./dist/musaik-tui   # luego: go tool pprof -sample_index=inuse_space dist/musaik-tui /tmp/heap.prof
+```
+
 ## Convivir con la app de escritorio
 
 Ambas leen y escriben el mismo `state.json`. Funciona bien si usas una a la vez; con las dos abiertas,

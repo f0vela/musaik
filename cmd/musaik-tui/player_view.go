@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -62,26 +63,35 @@ func (t *tui) progressBar(w int, frac float64, a, b color.Color, bg color.Color,
 	if filled > w {
 		filled = w
 	}
-	ar, ag, ab, _ := a.RGBA()
-	br, bgc, bb, _ := b.RGBA()
-	ca := color.RGBA{R: uint8(ar >> 8), G: uint8(ag >> 8), B: uint8(ab >> 8), A: 255}
-	cb := color.RGBA{R: uint8(br >> 8), G: uint8(bgc >> 8), B: uint8(bb >> 8), A: 255}
-	base := lipgloss.NewStyle()
-	if bg != nil {
-		base = base.Background(bg)
-	}
+	ca, cb := rgbaOf(a), rgbaOf(b)
+	// Written as raw color codes, in runs: a bar is a hundred cells or more, and
+	// a styled string per cell was the costliest part of the player bar.
 	var sb strings.Builder
-	for i := 0; i < w; i++ {
-		switch {
-		case i < filled-1 || (i == filled-1 && filled == w):
-			c := core.MixColor(ca, cb, float64(i)/float64(max(w-1, 1)))
-			sb.WriteString(base.Foreground(c).Render("━"))
-		case i == filled-1:
-			sb.WriteString(base.Foreground(t.th.text).Render("●"))
-		default:
-			sb.WriteString(base.Foreground(t.th.faint).Render("─"))
+	sb.Grow(w * 8)
+	full := filled
+	if filled < w {
+		full = filled - 1 // the cell at the head is the knob
+	}
+	if ca == cb {
+		if full > 0 {
+			sb.WriteString(sgr(ca, bg))
+			sb.WriteString(strings.Repeat("━", full))
+		}
+	} else {
+		for i := 0; i < full; i++ {
+			sb.WriteString(sgr(core.MixColor(ca, cb, float64(i)/float64(max(w-1, 1))), bg))
+			sb.WriteString("━")
 		}
 	}
+	if filled > 0 && filled < w {
+		sb.WriteString(sgr(rgbaOf(t.th.text), bg))
+		sb.WriteString("●")
+	}
+	if rest := w - max(filled, 0); rest > 0 {
+		sb.WriteString(sgr(rgbaOf(t.th.faint), bg))
+		sb.WriteString(strings.Repeat("─", rest))
+	}
+	sb.WriteString("\x1b[0m")
 	t.zone(x, y, w, 1, "seek", w)
 	return sb.String()
 }
@@ -291,6 +301,16 @@ func (t *tui) viewPlayer(l layout) []string {
 		}
 	}
 	return out
+}
+
+// sgr is the escape sequence that sets a foreground and, if bg is not nil, a background.
+func sgr(fg color.RGBA, bg color.Color) string {
+	s := "\x1b[38;2;" + strconv.Itoa(int(fg.R)) + ";" + strconv.Itoa(int(fg.G)) + ";" + strconv.Itoa(int(fg.B))
+	if bg != nil {
+		b := rgbaOf(bg)
+		s += ";48;2;" + strconv.Itoa(int(b.R)) + ";" + strconv.Itoa(int(b.G)) + ";" + strconv.Itoa(int(b.B))
+	}
+	return s + "m"
 }
 
 func rgbaOf(c color.Color) color.RGBA {

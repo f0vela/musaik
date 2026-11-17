@@ -221,6 +221,7 @@ func (t *tui) flushKitty() tea.Cmd {
 			if err != nil {
 				return nil
 			}
+			releaseMemory()
 			return kittyReadyMsg{key: j.key, seq: seq}
 		})
 	}

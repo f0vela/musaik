@@ -7,6 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"runtime"
+	"runtime/pprof"
+	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -25,14 +29,39 @@ func main() {
 		return
 	}
 
+	if path := os.Getenv("MUSAIK_HEAP_PROFILE"); path != "" {
+		// A heap profile on demand, to find where memory goes: kill -USR1 <pid>.
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGUSR1)
+		go func() {
+			for range sigs {
+				runtime.GC()
+				if f, err := os.Create(path); err == nil {
+					_ = pprof.WriteHeapProfile(f)
+					f.Close()
+				}
+			}
+		}()
+	}
+
 	eng := core.New(player.New())
 	if *root != "" {
 		eng.Settings.RootInput = *root
 	}
 	t := newTUI(eng, *mini)
 	t.setImageProto(detectImages(*images))
-	prog := tea.NewProgram(t)
+	t.cacheViews = true
+	// 30 frames a second is plenty for a terminal, and when a key is held down the
+	// renderer coalesces the updates in between instead of drawing every one.
+	prog := tea.NewProgram(t, tea.WithFPS(30))
 	eng.Post = func(fn func()) { prog.Send(funcMsg(fn)) }
+	// The player reports when a track ends; waiting for it here means the next
+	// song starts at once and the app does not have to ask on a timer.
+	go func() {
+		for ev := range eng.Player.Events() {
+			prog.Send(playerEventMsg(ev))
+		}
+	}()
 
 	if eng.Settings.RemoteControl {
 		t.setRemote(true)

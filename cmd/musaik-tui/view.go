@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -17,14 +18,49 @@ type libStats struct {
 	size   string
 }
 
-func (t *tui) computeStats() libStats {
-	return libStats{albums: len(t.eng.Albums("", "")), size: t.eng.TotalLibrarySize(t.eng.Store.Songs)}
+// refreshStats counts the albums now and adds up the size of the files in the
+// background: it is one stat call per song, which would stall the screen for as
+// long as the disk takes, on a big library or a cold cache.
+func (t *tui) refreshStats() {
+	e := t.eng
+	key := strconv.Itoa(len(e.Store.Songs)) + "|" + e.Store.Root
+	t.statsKey = key
+	t.stats = libStats{albums: len(e.Albums("", "")), size: "…"}
+	paths := make([]string, len(e.Store.Songs))
+	for i, s := range e.Store.Songs {
+		paths[i] = s.Path
+	}
+	sum := func() string {
+		var total int64
+		for _, p := range paths {
+			if info, err := os.Stat(p); err == nil {
+				total += info.Size()
+			}
+		}
+		return core.FormatFileSizeMB(total)
+	}
+	if e.Post == nil {
+		t.stats.size = sum()
+		return
+	}
+	go func() {
+		size := sum()
+		e.Post(func() {
+			if t.statsKey == key {
+				t.stats.size = size
+			}
+		})
+	}()
 }
 
 func (t *tui) View() tea.View {
+	if t.cacheViews && !t.dirty && t.viewOK {
+		return t.view
+	}
+	t.renders++
 	t.zones = t.zones[:0]
 	if t.stats.size == "" {
-		t.stats = t.computeStats()
+		t.refreshStats()
 	}
 	var content string
 	switch {
@@ -47,6 +83,7 @@ func (t *tui) View() tea.View {
 		v.BackgroundColor = t.th.bg
 		v.ForegroundColor = t.th.text
 	}
+	t.view, t.viewOK, t.dirty = v, true, false
 	return v
 }
 
