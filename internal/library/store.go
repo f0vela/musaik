@@ -62,6 +62,15 @@ func (s *Store) Index(root string) error {
 	return nil
 }
 
+// SetSongs replaces the indexed songs, as Index does after scanning. It lets a
+// caller scan on its own store and apply the result on the goroutine that owns
+// this one.
+func (s *Store) SetSongs(root string, songs []model.Song) {
+	s.Root = root
+	s.Songs = songs
+	s.rebuildIndexes()
+}
+
 func (s *Store) ToggleFavorite(songID string) {
 	if s.Favorites[songID] {
 		delete(s.Favorites, songID)

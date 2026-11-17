@@ -67,6 +67,16 @@ go test ./...
 go tool mygo build
 ```
 
+## Versión de terminal (TUI)
+
+Musaik también existe para la terminal (Go + Bubble Tea + Lip Gloss), con la misma biblioteca, playlists,
+ajustes y Last.fm que la app. Ver [`docs/TUI.md`](./docs/TUI.md) para la paridad de funciones y las teclas.
+
+```bash
+go build -o dist/musaik-tui ./cmd/musaik-tui
+./dist/musaik-tui
+```
+
 ## Memoria y profiling (RAM)
 
 Musaik incluye instrumentación opcional para pprof y muestreo de memoria:
@@ -93,3 +103,4 @@ Con estas variables:
 - Especificación técnica: [`PROJECT-SPECS.md`](./PROJECT-SPECS.md)
 - Roadmap y pendientes: [`todo.md`](./todo.md)
 - Operación, debugging y guías: [`docs/OPERATIONS.md`](./docs/OPERATIONS.md)
+- Versión de terminal: [`docs/TUI.md`](./docs/TUI.md)

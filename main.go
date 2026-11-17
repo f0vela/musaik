@@ -2316,6 +2316,8 @@ type actionHit struct {
 	AlbumName  string
 	Title      string
 	Subtitle   string
+	// Keywords are extra words the search matches, such as other names for the action.
+	Keywords string
 }
 
 func (a *app) viewActionBar(c *ui.Context) {
@@ -2484,12 +2486,13 @@ func (a *app) actionHits() []actionHit {
 		{Kind: "action", ActionID: "sync-current-song-lastfm", Title: "Sync current song with Last.fm", Subtitle: "Last.fm"},
 		{Kind: "action", ActionID: "settings", Title: "Ajustes", Subtitle: "App • ⌘,"},
 		{Kind: "action", ActionID: "toggle-sidebar", Title: "Mostrar/ocultar barra lateral", Subtitle: "App • ⌘B"},
-		{Kind: "action", ActionID: "quit", Title: "Quit", Subtitle: "App"},
+		{Kind: "action", ActionID: "quit", Title: "Cerrar Musaik", Subtitle: "App", Keywords: "quit salir cerrar exit"},
 	}
 	for _, action := range actions {
 		if q != "" &&
 			!strings.Contains(strings.ToLower(action.Title), q) &&
-			!strings.Contains(strings.ToLower(action.ActionID), q) {
+			!strings.Contains(strings.ToLower(action.ActionID), q) &&
+			!strings.Contains(action.Keywords, q) {
 			continue
 		}
 		out = append(out, action)
