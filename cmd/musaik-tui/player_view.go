@@ -96,52 +96,62 @@ func (t *tui) progressBar(w int, frac float64, a, b color.Color, bg color.Color,
 	return sb.String()
 }
 
-// transport draws shuffle, previous, play/pause, next and repeat, and makes
-// each button clickable. It returns the text and its width.
-func (t *tui) transport(paint func(color.Color) lipgloss.Style, accent color.Color, playBg color.Color, x, y int) (string, int) {
+// Each transport button is a slot of fixed width with its symbol centered, so
+// what is drawn and what can be clicked are the same cells, a button never
+// changes size (play shows ▶ or ❚❚), and the row is always transportW wide.
+const (
+	transportSlot = 5
+	transportPlay = 7
+	transportGap  = 1
+	transportW    = 4*transportSlot + transportPlay + 4*transportGap
+)
+
+// transport draws shuffle, previous, play/pause, next and repeat starting at
+// (x, y), and makes each button clickable. Shuffle and repeat are lit when on:
+// in the accent color and, if toggleBg is not nil, on that background. It returns
+// the text and its width, always transportW.
+func (t *tui) transport(paint func(color.Color) lipgloss.Style, accent color.Color, playBg, toggleBg color.Color, x, y int) (string, int) {
 	th := t.th
 	e := t.eng
 	pb := t.playback()
-	type btn struct {
-		kind, text string
-		style      lipgloss.Style
-	}
-	shuffle := btn{"shuffle", "⇄", paint(th.muted)}
-	if e.Shuffle {
-		shuffle.style = paint(accent).Bold(true)
+	toggle := func(on bool) lipgloss.Style {
+		if !on {
+			return paint(th.muted)
+		}
+		st := paint(accent).Bold(true)
+		if toggleBg != nil {
+			st = st.Background(toggleBg)
+		}
+		return st
 	}
 	play := "▶"
 	if pb.playing {
 		play = "❚❚"
 	}
-	repeat := btn{"repeat", "↻", paint(th.muted)}
-	switch e.Repeat {
-	case core.RepeatAll:
-		repeat.style = paint(accent).Bold(true)
-	case core.RepeatOne:
-		repeat = btn{"repeat", "↻1", paint(accent).Bold(true)}
+	repeat := "↻"
+	if e.Repeat == core.RepeatOne {
+		repeat = "↻1"
 	}
-	btns := []btn{
-		shuffle,
-		{"prev", "◀◀", paint(th.text)},
-		{"play", play, lipgloss.NewStyle().Foreground(th.accentText).Background(playBg).Bold(true)},
-		{"next", "▶▶", paint(th.text)},
-		repeat,
+	btns := []struct {
+		kind, sym string
+		w         int
+		style     lipgloss.Style
+	}{
+		{"shuffle", "⇄", transportSlot, toggle(e.Shuffle)},
+		{"prev", "◀◀", transportSlot, paint(th.text)},
+		{"play", play, transportPlay, lipgloss.NewStyle().Foreground(th.accentText).Background(playBg).Bold(true)},
+		{"next", "▶▶", transportSlot, paint(th.text)},
+		{"repeat", repeat, transportSlot, toggle(e.Repeat != core.RepeatOff)},
 	}
 	var sb strings.Builder
 	cx := x
 	for i, b := range btns {
-		txt := " " + b.text + " "
-		if b.kind == "play" {
-			txt = " " + b.text + " "
-		}
-		w := lipgloss.Width(txt)
-		sb.WriteString(b.style.Render(txt))
-		t.zone(cx, y, w, 1, b.kind, 0)
-		cx += w
+		sb.WriteString(b.style.Render(center(b.sym, b.w)))
+		t.zone(cx, y, b.w, 1, b.kind, 0)
+		cx += b.w
 		if i < len(btns)-1 {
-			sb.WriteString(paint(th.muted).Render(" "))
-			cx++
+			sb.WriteString(paint(th.muted).Render(strings.Repeat(" ", transportGap)))
+			cx += transportGap
 		}
 	}
 	return sb.String(), cx - x
@@ -182,16 +192,17 @@ func trunc(s string, w int) string {
 
 // titleLine is the title followed by the like heart, and artistLine the
 // artist and album; both are as wide as their text, up to w cells.
-func (t *tui) titleLine(song model.Song, has bool, w int, paint func(color.Color) lipgloss.Style) string {
+func (t *tui) titleLine(song model.Song, has bool, w int, paint func(color.Color) lipgloss.Style) (string, int) {
 	th := t.th
 	if !has {
-		return paint(th.text).Bold(true).Render("Sin reproducción")
+		return paint(th.text).Bold(true).Render("Sin reproducción"), -1
 	}
 	heart := paint(th.muted).Render("♡")
 	if t.eng.Store.Favorites[song.ID] {
 		heart = paint(th.bad).Render("♥")
 	}
-	return paint(th.text).Bold(true).Render(trunc(song.Title, max(w-2, 1))) + paint(th.muted).Render(" ") + heart
+	title := trunc(song.Title, max(w-2, 1))
+	return paint(th.text).Bold(true).Render(title) + paint(th.muted).Render(" ") + heart, ansi.StringWidth(title) + 1
 }
 
 func (t *tui) artistLine(song model.Song, has bool, w int, paint func(color.Color) lipgloss.Style) string {
@@ -259,8 +270,15 @@ func (t *tui) viewPlayer(l layout) []string {
 		barW := max(rw-ansi.StringWidth(pb.posS)-ansi.StringWidth(pb.durS)-2, 4)
 		return plain(th.muted).Render(pb.posS+" ") + t.progressBar(barW, pb.frac, th.accent, th.accent, nil, rx+ansi.StringWidth(pb.posS)+1, y(row)) + plain(th.muted).Render(" "+pb.durS)
 	}
+	// likeZone makes the heart after the title clickable: only the heart, not the
+	// whole title.
+	likeZone := func(row, offset int) {
+		if offset >= 0 {
+			t.zone(rx+offset, y(row), 1, 1, "like", 0)
+		}
+	}
 	controls := func(row, x int, withVolume bool) (string, int) {
-		tr, trW := t.transport(plain, th.accent, th.accent, x, y(row))
+		tr, trW := t.transport(plain, th.accent, th.accent, th.chip, x, y(row))
 		if !withVolume {
 			return tr, trW
 		}
@@ -270,26 +288,31 @@ func (t *tui) viewPlayer(l layout) []string {
 
 	switch {
 	case rows >= 4 && rw >= 84:
-		// song | transport, volume
-		trW := 5*4 + 4 + 4
+		// song | transport, volume: both pressed against the right edge, at the
+		// width they really have (spread puts them there)
 		volW := 4 + 10 + 1 + 4
-		infoW := rw - trW - 4
-		tr, _ := t.transport(plain, th.accent, th.accent, rx+rw-trW, y(0))
+		infoW := rw - transportW - 2
+		tr, _ := t.transport(plain, th.accent, th.accent, th.chip, rx+rw-transportW, y(0))
 		vol, _ := t.volume(plain, th.accent, 10, rx+rw-volW, y(1))
-		body[0] = spread(fit(t.titleLine(song, has, infoW, plain), infoW), tr, rw)
+		title, heart := t.titleLine(song, has, infoW, plain)
+		body[0] = spread(fit(title, infoW), tr, rw)
 		body[1] = spread(fit(t.artistLine(song, has, infoW, plain), infoW), vol, rw)
 		body[2] = t.qualityLine(song, has, plain)
 		body[3] = progress(3)
-		t.zone(rx, y(0), infoW, 1, "like", 0)
+		likeZone(0, heart)
 	case rows >= 4:
-		ctl, _ := controls(2, rx, rw >= 62)
-		body[0] = t.titleLine(song, has, rw, plain)
+		ctl, _ := controls(2, rx, rw >= transportW+3+19)
+		title, heart := t.titleLine(song, has, rw, plain)
+		likeZone(0, heart)
+		body[0] = title
 		body[1] = t.artistLine(song, has, rw, plain)
 		body[2] = ctl
 		body[3] = progress(3)
 	case rows == 3:
-		ctl, _ := controls(1, rx, rw >= 62)
-		body[0] = t.titleLine(song, has, rw*2/3, plain) + plain(th.muted).Render("  ") + t.artistLine(song, has, max(rw/3-2, 1), plain)
+		ctl, _ := controls(1, rx, rw >= transportW+3+19)
+		title, heart := t.titleLine(song, has, rw*2/3, plain)
+		likeZone(0, heart)
+		body[0] = title + plain(th.muted).Render("  ") + t.artistLine(song, has, max(rw/3-2, 1), plain)
 		body[1] = ctl
 		body[2] = progress(2)
 	}
@@ -413,7 +436,7 @@ func (t *tui) viewMini() string {
 		art = placeholderArt(coverCols, coverRows, th.faint, th.chip, "♪")
 	}
 
-	ctlW := 5*4 + 4
+	ctlW := transportW
 	progress := func(x, y, width int) string {
 		barW := max(width-ansi.StringWidth(pb.posS)-ansi.StringWidth(pb.durS)-2, 4)
 		return paint(th.muted).Render(pb.posS+" ") + t.progressBar(barW, pb.frac, a1, a2, bd, x+ansi.StringWidth(pb.posS)+1, y) + paint(th.muted).Render(" "+pb.durS)
@@ -438,7 +461,7 @@ func (t *tui) viewMini() string {
 		set(top, paint(th.text).Bold(true).Render(text(name, "", textW)))
 		set(top+1, paint(th.muted).Render(text(artist+"  "+heart, "", textW)))
 		set(top+3, progress(tx, cy+top+3, textW))
-		tr, _ := t.transport(paint, bright(accent), accent, tx, cy+top+5)
+		tr, _ := t.transport(paint, bright(accent), accent, nil, tx, cy+top+5)
 		set(top+5, tr)
 		for i := 0; i < coverRows; i++ {
 			card = append(card, art[i]+paint(th.text).Render("   ")+padBg(info[i], textW, bd))
@@ -457,7 +480,7 @@ func (t *tui) viewMini() string {
 		card = append(card, padBg("", cardW, bd))
 		card = append(card, padBg(progress(cx, cy+coverRows+4, cardW), cardW, bd))
 		card = append(card, padBg("", cardW, bd))
-		tr, _ := t.transport(paint, bright(accent), accent, cx+(cardW-ctlW)/2, cy+coverRows+6)
+		tr, _ := t.transport(paint, bright(accent), accent, nil, cx+max((cardW-ctlW)/2, 0), cy+coverRows+6)
 		card = append(card, pad(tr, ctlW))
 	}
 
