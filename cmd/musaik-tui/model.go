@@ -15,7 +15,7 @@ import (
 
 // version is shown in Settings > About; it follows the desktop app's mygo.json,
 // and a build can set it: -ldflags "-X main.version=1.2.3".
-var version = "0.4.1"
+var version = "0.4.2"
 
 type sectionID int
 
@@ -225,10 +225,13 @@ type tui struct {
 	zones       []zone
 	vis         int
 	stats       libStats
+
+	proto imgProto
+	artPx int // longest side, in pixels, that covers are decoded at
+	kitty kittyState
 }
 
 const (
-	artMax     = 160
 	artKeep    = 40
 	tickEvery  = 250 * time.Millisecond
 	rowsPerPg  = 10
@@ -250,6 +253,8 @@ func newTUI(eng *core.Engine, mini bool) *tui {
 		avatarTry:  map[string]bool{},
 		coverCache: map[string][]string{},
 		rowsDirty:  true,
+		artPx:      artPxBlocks,
+		kitty:      kittyState{next: kittyFirst, imgs: map[string]*kittyImg{}},
 	}
 	if id, ok := sectionFromName(eng.Settings.Section); ok && id != secPlaylist && id != secSettings {
 		t.sec = id
@@ -289,6 +294,10 @@ func (t *tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.rowsDirty = true
 	case artMsg:
 		t.storeArt(msg)
+	case kittyReadyMsg:
+		cmds = append(cmds, t.onKittyReady(msg))
+	case kittySentMsg:
+		t.onKittySent(msg)
 	case avatarMsg:
 		if msg.img != nil {
 			t.avatars[core.ArtistAvatarKey(msg.artist)] = msg.img
@@ -308,7 +317,7 @@ func (t *tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.onWheel(msg.Mouse())
 	}
 	t.refreshIfDirty()
-	cmds = append(cmds, t.artCmds())
+	cmds = append(cmds, t.artCmds(), t.flushKitty())
 	if t.quiting {
 		return t, tea.Quit
 	}
@@ -433,12 +442,14 @@ func (t *tui) dropImages(id string) {
 			delete(t.coverCache, k)
 		}
 	}
+	t.forgetKitty(id)
 }
 
 // artCmds loads the covers the screen needs and that are not cached yet: the
 // playing song's, the open album's, and the open artist's photo.
 func (t *tui) artCmds() tea.Cmd {
 	var cmds []tea.Cmd
+	px := t.artPx
 	want := func(s model.Song) {
 		key := core.CoverKey(s)
 		if _, ok := t.art[key]; ok || t.artLoading[key] {
@@ -446,7 +457,7 @@ func (t *tui) artCmds() tea.Cmd {
 		}
 		t.artLoading[key] = true
 		path := s.Path
-		cmds = append(cmds, func() tea.Msg { return artMsg{key: key, art: core.LoadArtwork(path, artMax)} })
+		cmds = append(cmds, func() tea.Msg { return artMsg{key: key, art: core.LoadArtwork(path, px)} })
 	}
 	if s, ok := t.eng.CurrentSong(); ok {
 		want(s)
@@ -458,12 +469,12 @@ func (t *tui) artCmds() tea.Cmd {
 		key := core.ArtistAvatarKey(t.artist)
 		if _, ok := t.avatars[key]; !ok && !t.avatarTry[key] {
 			t.avatarTry[key] = true
-			if img := core.LoadArtistAvatarFromDisk(t.artist, artMax); img != nil {
+			if img := core.LoadArtistAvatarFromDisk(t.artist, t.artPx); img != nil {
 				t.avatars[key] = img
 			} else {
 				artist, client := t.artist, t.eng.LastFM
 				cmds = append(cmds, func() tea.Msg {
-					img, _ := core.FetchArtistAvatar(client, artist, artMax)
+					img, _ := core.FetchArtistAvatar(client, artist, px)
 					return avatarMsg{artist: artist, img: img}
 				})
 			}
@@ -499,6 +510,12 @@ func (t *tui) avatar(artist string, cols, rows int) []string {
 }
 
 func (t *tui) image(id string, cols, rows int, a *artEntry) []string {
+	if t.proto == protoKitty && a != nil && a.img != nil {
+		// In the terminal at full resolution, or on its way: half blocks until then.
+		if lines := t.kittyImage(id, cols, rows, a.img); lines != nil {
+			return lines
+		}
+	}
 	key := "img|" + id + "|" + strconv.Itoa(cols) + "x" + strconv.Itoa(rows)
 	if lines, ok := t.coverCache[key]; ok {
 		return lines

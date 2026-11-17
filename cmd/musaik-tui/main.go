@@ -17,6 +17,7 @@ import (
 func main() {
 	mini := flag.Bool("mini", false, "start in mini player mode")
 	root := flag.String("root", "", "music folder to index (default: the saved one)")
+	images := flag.String("images", os.Getenv("MUSAIK_IMAGES"), "how covers are drawn: auto, kitty or blocks (default auto: kitty graphics in kitty and Ghostty)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
@@ -29,6 +30,7 @@ func main() {
 		eng.Settings.RootInput = *root
 	}
 	t := newTUI(eng, *mini)
+	t.setImageProto(detectImages(*images))
 	prog := tea.NewProgram(t)
 	eng.Post = func(fn func()) { prog.Send(funcMsg(fn)) }
 
@@ -44,6 +46,9 @@ func main() {
 	}
 
 	_, err := prog.Run()
+	if t.proto == protoKitty {
+		fmt.Print(kittyDeleteAll()) // no image outlives the program
+	}
 	t.remote.Close()
 	eng.Player.Stop()
 	eng.FlushIfDirty(true)

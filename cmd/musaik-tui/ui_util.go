@@ -93,18 +93,7 @@ func halfBlocks(img image.Image, cols, rows int) []string {
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, cols, rows*2))
 	// Crop to the cell grid's aspect ratio, as the desktop app's Cover fit does.
-	b := img.Bounds()
-	srcW, srcH := b.Dx(), b.Dy()
-	want := float64(cols) / float64(rows*2)
-	r := b
-	if float64(srcW)/float64(srcH) > want {
-		nw := int(float64(srcH) * want)
-		r = image.Rect(b.Min.X+(srcW-nw)/2, b.Min.Y, b.Min.X+(srcW-nw)/2+nw, b.Max.Y)
-	} else {
-		nh := int(float64(srcW) / want)
-		r = image.Rect(b.Min.X, b.Min.Y+(srcH-nh)/2, b.Max.X, b.Min.Y+(srcH-nh)/2+nh)
-	}
-	xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, r, xdraw.Src, nil)
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, cropRect(img.Bounds(), cols, rows), xdraw.Src, nil)
 	lines := make([]string, rows)
 	for y := 0; y < rows; y++ {
 		var sb strings.Builder

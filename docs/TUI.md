@@ -11,10 +11,26 @@ go build -ldflags "-X main.version=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' myg
 ./dist/musaik-tui            # abre la biblioteca guardada
 ./dist/musaik-tui -root ~/Music   # indexa otra carpeta al arrancar
 ./dist/musaik-tui -mini      # arranca en modo mini
+./dist/musaik-tui -images blocks  # fuerza el modo de bloques
 ```
 
 Requiere `ffplay`/`ffprobe`, igual que la app (misma resolución: `PATH`, `MUSAIK_FFMPEG_DIR`, `./bin`).
-Para ver las carátulas hace falta una terminal con color de 24 bits (iTerm2, Ghostty, kitty, WezTerm, Terminal.app reciente…).
+
+## Carátulas
+
+Hay dos modos, y `-images` (o `MUSAIK_IMAGES`) elige: `auto` (por defecto), `kitty` o `blocks`.
+
+- **`kitty`** — imágenes nítidas a resolución completa con el protocolo gráfico de Kitty y *Unicode placeholders*:
+  la imagen se envía una vez a la terminal (PNG, hasta 640 px) y en pantalla van celdas de texto que la terminal
+  sustituye por la imagen. Al ser texto, se comportan bien con modales, scroll y el renderizador de Bubble Tea.
+  `auto` lo activa en **kitty** y **Ghostty**. Requisitos: kitty ≥ 0.28 o Ghostty, y color de 24 bits (`COLORTERM=truecolor`,
+  que ambas definen). Mientras la imagen llega se muestra la versión en bloques, y al salir se liberan todas.
+- **`blocks`** — medio bloque (`▀`, dos píxeles por celda): funciona en cualquier terminal con color de 24 bits
+  (iTerm2, WezTerm, Terminal.app reciente…) pero es de baja resolución, porque una carátula de 8×4 celdas son 8×8 píxeles.
+
+Dentro de tmux o screen `auto` usa `blocks`, porque las secuencias gráficas necesitan *passthrough*; se puede forzar con
+`-images kitty` si lo tienes configurado (`allow-passthrough on`). Se asume una celda el doble de alta que de ancha para
+recortar la imagen; si la tuya difiere mucho, la carátula se estira un poco.
 
 ## Arquitectura
 
