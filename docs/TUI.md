@@ -32,6 +32,32 @@ Dentro de tmux o screen `auto` usa `blocks`, porque las secuencias gráficas nec
 `-images kitty` si lo tienes configurado (`allow-passthrough on`). Se asume una celda el doble de alta que de ancha para
 recortar la imagen; si la tuya difiere mucho, la carátula se estira un poco.
 
+## Temas
+
+`T` abre el selector (también en la paleta de comandos: «Cambiar tema…», y en Ajustes → Apariencia).
+Al mover el cursor se previsualiza cada tema sobre toda la app; `enter` lo aplica y `esc` vuelve al anterior.
+`←`/`→` sobre el campo «Tema» de Ajustes también los recorre.
+
+| Familia | Variantes |
+|---|---|
+| Automático | sigue el fondo de la terminal (claro u oscuro) y no toca sus colores |
+| Sonora | Oscuro, Claro — la paleta de la app de escritorio |
+| Dracula | — |
+| Catppuccin | Mocha, Macchiato, Frappé, Latte |
+| Tokyo Night | Night, Storm, Day |
+| Rosé Pine | Rosé Pine, Moon, Dawn |
+| Gruvbox | Oscuro, Claro |
+| Nord · One Dark · Kanagawa | — |
+| Solarized | Oscuro, Claro |
+
+Un tema con nombre **fija el fondo y el color de texto de la terminal mientras la app corre** (OSC 11/10) y los
+restaura al salir; «Automático» no cambia nada. De cada paleta solo se definen el fondo, el texto, el gris de
+comentarios, el acento y siete tonos; el resto (bordes, selección, paneles, chips) se mezcla a partir de ellos,
+así todos los temas reciben el mismo tratamiento. Un test comprueba el contraste WCAG de cada uno.
+
+La elección se guarda en `tui.json` (junto a `settings.json`), no en `settings.json`: la app de escritorio reescribe
+ese archivo con las claves que conoce y borraría una desconocida. La app de escritorio sigue el tema del sistema.
+
 ## Arquitectura
 
 ```
@@ -71,6 +97,7 @@ vuelve a su goroutine con `Engine.Post`, así que no hay locks ni carreras (`go 
 | Reproductor adaptable al tamaño | ✓ | ✓ (3 niveles + modo compacto) |
 | Mini reproductor | ventana flotante | pantalla compacta con los colores de la carátula (`M`, `-mini`) |
 | Tema claro/oscuro del sistema | ✓ | ✓ (sigue el fondo de la terminal) |
+| Selector de temas (Dracula, Catppuccin, Tokyo Night, Rosé Pine…) | — | ✓ solo TUI (`T`) |
 | Ratón | ✓ | ✓ (filas, barra de progreso, volumen, botones, rueda) |
 
 ### Lo que no se porta
@@ -120,6 +147,7 @@ vuelve a su goroutine con `Engine.Post`, así que no hay locks ni carreras (`go 
 | `,` | ajustes (`[` `]` o `←` `→` cambian de pestaña) |
 | `b` | barra lateral |
 | `M` | mini reproductor |
+| `T` | elegir tema |
 | `ctrl+r` | reindexar |
 | `I` | iPod: detectar / sincronizar |
 | `q` | salir |

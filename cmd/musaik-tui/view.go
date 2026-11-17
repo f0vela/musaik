@@ -39,8 +39,13 @@ func (t *tui) View() tea.View {
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	v.WindowTitle = "Musaik"
-	if t.mini {
+	switch {
+	case t.mini:
 		v.BackgroundColor = t.miniBackdrop()
+	case t.th.bg != nil:
+		// A named theme brings its own background; auto leaves the terminal's.
+		v.BackgroundColor = t.th.bg
+		v.ForegroundColor = t.th.text
 	}
 	return v
 }

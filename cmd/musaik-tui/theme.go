@@ -9,7 +9,11 @@ import (
 // theme mirrors the desktop app's palette ("sonora"): the same colors, with the
 // translucent ones pre-blended because a terminal has no alpha.
 type theme struct {
-	dark                           bool
+	dark bool
+	// bg is the background the app asks the terminal for; nil keeps the terminal's own.
+	bg color.Color
+	// hues are the colors of the playlist dots, by name.
+	hues                           map[string]color.Color
 	text, muted, faint             color.Color
 	border, accent, accentText     color.Color
 	selected, panel, chip          color.Color
@@ -17,7 +21,24 @@ type theme struct {
 	badgeFg, badgeBg, nowFg, nowBg color.Color
 }
 
+var sonoraHues = map[string]color.Color{
+	"purple": lipgloss.Color("#8B5CF6"),
+	"yellow": lipgloss.Color("#F59E0B"),
+	"red":    lipgloss.Color("#EF4444"),
+	"orange": lipgloss.Color("#F97316"),
+	"green":  lipgloss.Color("#10B981"),
+	"blue":   lipgloss.Color("#3B82F6"),
+	"gray":   lipgloss.Color("#9CA3AF"),
+}
+
+// newTheme is the desktop app's palette, dark or light, on the terminal's own background.
 func newTheme(dark bool) theme {
+	th := sonoraTheme(dark)
+	th.hues = sonoraHues
+	return th
+}
+
+func sonoraTheme(dark bool) theme {
 	if dark {
 		return theme{
 			dark:       true,
@@ -70,19 +91,11 @@ func (t theme) accented() lipgloss.Style { return t.fg(t.accent) }
 
 // playlistColor is the dot color of a playlist, as in the desktop sidebar.
 func (t theme) playlistColor(name string) color.Color {
-	switch name {
-	case "purple":
-		return lipgloss.Color("#8B5CF6")
-	case "yellow":
-		return lipgloss.Color("#F59E0B")
-	case "red":
-		return lipgloss.Color("#EF4444")
-	case "orange":
-		return lipgloss.Color("#F97316")
-	case "green":
-		return lipgloss.Color("#10B981")
-	case "blue":
-		return lipgloss.Color("#3B82F6")
+	if c, ok := t.hues[name]; ok {
+		return c
 	}
-	return lipgloss.Color("#9CA3AF")
+	if c, ok := t.hues["gray"]; ok {
+		return c
+	}
+	return t.faint
 }

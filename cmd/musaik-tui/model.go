@@ -15,7 +15,7 @@ import (
 
 // version is shown in Settings > About; it follows the desktop app's mygo.json,
 // and a build can set it: -ldflags "-X main.version=1.2.3".
-var version = "0.4.2"
+var version = "0.4.3"
 
 type sectionID int
 
@@ -136,6 +136,7 @@ const (
 	modalRenamePlaylist
 	modalDeletePlaylist
 	modalAddToPlaylist
+	modalTheme
 )
 
 type modalState struct {
@@ -229,6 +230,9 @@ type tui struct {
 	proto imgProto
 	artPx int // longest side, in pixels, that covers are decoded at
 	kitty kittyState
+
+	themeID  string
+	termDark bool // whether the terminal's own background is dark, for the auto theme
 }
 
 const (
@@ -242,6 +246,8 @@ func newTUI(eng *core.Engine, mini bool) *tui {
 	t := &tui{
 		eng:        eng,
 		th:         newTheme(true),
+		themeID:    loadPrefs().Theme,
+		termDark:   true,
 		w:          100,
 		h:          30,
 		sec:        secSongs,
@@ -262,6 +268,7 @@ func newTUI(eng *core.Engine, mini bool) *tui {
 	if strings.TrimSpace(eng.Settings.SearchQuery) != "" {
 		t.search.Set(eng.Settings.SearchQuery)
 	}
+	t.applyTheme()
 	t.initSettings()
 	for _, pl := range eng.VisiblePlaylists() {
 		t.playlist = pl.Name
@@ -285,7 +292,8 @@ func (t *tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		t.w, t.h = msg.Width, msg.Height
 	case tea.BackgroundColorMsg:
-		t.th = newTheme(msg.IsDark())
+		t.termDark = msg.IsDark()
+		t.applyTheme()
 	case tickMsg:
 		t.onTick()
 		cmds = append(cmds, tickCmd())

@@ -125,6 +125,8 @@ func (t *tui) globalKey(s string) bool {
 		t.openPalette()
 	case "?":
 		t.help = true
+	case "T":
+		t.openThemePicker()
 	case "b":
 		t.toggleSidebar()
 	case "M":
@@ -587,6 +589,10 @@ func (t *tui) cyclePlaylistColor(name string) {
 func (t *tui) modalKey(k tea.KeyPressMsg) {
 	m := &t.modal
 	s := k.String()
+	if m.kind == modalTheme {
+		t.themeKey(s)
+		return
+	}
 	if s == "esc" {
 		t.modal = modalState{}
 		return

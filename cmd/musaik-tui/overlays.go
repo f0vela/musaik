@@ -147,6 +147,9 @@ func hitGlyph(h actionHit) string {
 // ---- modals --------------------------------------------------------------------------------
 
 func (t *tui) viewModal() string {
+	if t.modal.kind == modalTheme {
+		return t.viewThemePicker()
+	}
 	th := t.th
 	pp := t.panelPaint()
 	m := &t.modal
@@ -238,7 +241,7 @@ func (t *tui) viewHelp() string {
 		}},
 		{"App", []kv{
 			{"ctrl+p  :", "paleta de comandos"}, {",", "ajustes"}, {"b", "barra lateral"},
-			{"M", "mini reproductor"}, {"ctrl+r", "reindexar biblioteca"}, {"I", "iPod: detectar / sincronizar"},
+			{"M", "mini reproductor"}, {"T", "elegir tema"}, {"ctrl+r", "reindexar biblioteca"}, {"I", "iPod: detectar / sincronizar"},
 			{"?", "esta ayuda"}, {"q", "salir"},
 		}},
 	}

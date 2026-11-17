@@ -89,7 +89,8 @@ func (t *tui) settingsFields() []sfield {
 		}
 		return []sfield{
 			{kind: "head", label: "Appearance"},
-			{kind: "info", text: fmt.Sprintf("Theme mode: %s (sigue el fondo de la terminal)", mode)},
+			{kind: "select", id: "theme", label: "Tema (enter: elegir)", text: themeDefByID(t.themeID).label},
+			{kind: "info", text: fmt.Sprintf("Modo %s. «Automático» sigue el fondo de la terminal; los demás fijan su propio fondo mientras la app corre.", mode)},
 			{kind: "toggle", id: "sidebar", label: "Barra lateral", text: sidebar},
 			{kind: "head", label: "Mini reproductor"},
 			{kind: "info", text: "Tecla M: tarjeta compacta con los colores de la carátula. La opacidad es cosa de la ventana de la app de escritorio; aquí la terminal manda."},
@@ -197,6 +198,10 @@ func (t *tui) settingsTab(d int) {
 }
 
 func (t *tui) cycleSelect(id string, d int) {
+	if id == "theme" {
+		t.cycleTheme(d)
+		return
+	}
 	if id != "ipod_playlist" {
 		return
 	}
@@ -217,6 +222,10 @@ func (t *tui) activateField(f sfield) {
 	case "input":
 		t.set.editing = true
 	case "select":
+		if f.id == "theme" {
+			t.openThemePicker()
+			return
+		}
 		t.cycleSelect(f.id, 1)
 	case "toggle":
 		switch f.id {

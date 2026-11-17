@@ -161,3 +161,15 @@ func TestRenderColors(t *testing.T) {
 	tu2.press("enter", "M")
 	save("color-mini-wide", ansiToImage(tu2.View().Content, 9, 18, black))
 }
+
+func writePNGFile(t *testing.T, path string, img image.Image) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := png.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
+}
