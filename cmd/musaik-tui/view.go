@@ -137,6 +137,9 @@ func (t *tui) viewMainColumn(l layout) []string {
 	if l.side {
 		x0 = l.sw + 1
 	}
+	if t.lyr.open && t.sec != secSettings {
+		return t.viewLyrics(l.mw, l.contentH+l.topH, x0, 0)
+	}
 	var body []string
 	switch t.sec {
 	case secArtists:

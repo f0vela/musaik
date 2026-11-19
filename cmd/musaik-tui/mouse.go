@@ -49,6 +49,8 @@ func (t *tui) onClick(m tea.Mouse) tea.Cmd {
 		}
 	case "row", "item", "artist", "album":
 		t.clickRow(z)
+	case "lyric":
+		t.seekToLyric(z.arg)
 	case "seek":
 		if st := e.Player.State(); st.Playing && st.Duration > 0 && z.arg > 0 {
 			frac := float64(m.X-z.x) / float64(z.arg-1)
@@ -99,6 +101,15 @@ func (t *tui) clickRow(z zone) {
 
 func (t *tui) onWheel(m tea.Mouse) {
 	if t.modal.kind != modalNone || t.pal.open || t.help || t.sec == secSettings {
+		return
+	}
+	if t.lyr.open {
+		switch m.Button {
+		case tea.MouseWheelUp:
+			t.scrollLyrics(-3)
+		case tea.MouseWheelDown:
+			t.scrollLyrics(3)
+		}
 		return
 	}
 	n, ls, skip := t.active()

@@ -9,6 +9,7 @@ import (
 
 	"musaik/internal/lastfm"
 	"musaik/internal/library"
+	"musaik/internal/lyrics"
 	"musaik/internal/model"
 	"musaik/internal/player"
 )
@@ -49,6 +50,8 @@ type Engine struct {
 	Player   Player
 	LastFM   *lastfm.Client
 	Settings *Settings
+	// Lyrics finds the lyrics of the song (nil: LRCLIB with the default cache).
+	Lyrics *lyrics.Client
 
 	// Queue holds the IDs of the songs that play next, before the library
 	// order continues.
@@ -78,12 +81,13 @@ type Engine struct {
 	// reports back through it. Nil runs fn at once (tests).
 	Post func(fn func())
 
-	goingBack  bool
-	songIdx    map[string]int
-	sizeCache  map[string]int64
-	dirty      bool
-	dirtySince time.Time
-	rng        *rand.Rand
+	goingBack   bool
+	songIdx     map[string]int
+	sizeCache   map[string]int64
+	lyricsCache map[string]*LyricsEntry
+	dirty       bool
+	dirtySince  time.Time
+	rng         *rand.Rand
 }
 
 // New builds an engine on p with the saved library and settings loaded.

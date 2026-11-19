@@ -17,6 +17,7 @@ Musaik es un reproductor de música local escrito en Go. Tiene tres caras que co
 ![Songs View With Sidebar](screens/cli-main-sidebar.png)
 ![Songs View No Sidebar](screens/cli-main-nosidebar.png)
 ![Action Bar](screens/cli-action-bar.png)
+![Miniplayer - Song Focus Mode](screens/cli-miniplayer.png)
 
 
 ## Funcionalidades principales
@@ -45,6 +46,8 @@ Musaik es un reproductor de música local escrito en Go. Tiene tres caras que co
   Se abre con el botón de la barra del reproductor o `⇧⌘M`; oculta la ventana principal y un botón (o `⇧⌘M`, `⌘W`, `Esc`) vuelve a ella.
   La transparencia del fondo se ajusta en Ajustes → Apariencia.
 - Barra lateral ocultable (`⌘B`).
+- **Letras** (`⌘L` o el botón ♫ de la barra del reproductor): sincronizadas con la canción, la línea actual queda centrada y un clic en una línea salta a ese punto.
+  Busca primero un `.lrc` junto al audio y la etiqueta de letra incrustada, y si no hay, consulta [LRCLIB](https://lrclib.net) (gratis, sin clave). Solo se consulta al abrir la letra y las respuestas se guardan en `~/Library/Application Support/musaik/lyrics-cache`.
 - Last.fm:
   - auth automática desde ajustes
   - now playing, scrobble, `track.love`, sync de playcount/liked
@@ -62,6 +65,7 @@ Musaik es un reproductor de música local escrito en Go. Tiene tres caras que co
 | `⌘P` | Action Bar |
 | `⌘,` | Ajustes |
 | `⌘B` | Mostrar/ocultar barra lateral |
+| `⌘L` | Letra de la canción |
 | `⇧⌘M` | Mini reproductor (abrir/volver) |
 | `Espacio` | Play/pausa (en el mini reproductor) |
 | `⌘W` · `Esc` | Cerrar ajustes / volver desde el mini reproductor |
@@ -136,6 +140,7 @@ go build -o dist/musaik-tui ./cmd/musaik-tui
 - **Carátulas a resolución completa** en kitty y Ghostty (protocolo gráfico de Kitty con *Unicode placeholders*); en cualquier otra terminal, en medio bloque.
 - **20 temas** (`T`): Dracula, Catppuccin (Mocha, Macchiato, Frappé, Latte), Tokyo Night (Night, Storm, Day), Rosé Pine (con Moon y Dawn), Gruvbox, Nord, Solarized, One Dark, Kanagawa y los dos de Sonora (la paleta de la app de escritorio), más la opción «Automático», que sigue el fondo de la terminal.
 - **Mini reproductor** (`M`): tarjeta compacta con los colores de la carátula.
+- **Letras** (`L`): sincronizadas con LRCLIB, `.lrc` locales o etiqueta incrustada; la línea actual sigue a la canción, y se puede desplazar y hacer clic para saltar.
 - **Ligera**: ~0,4 % de un núcleo en reposo con 3600 canciones, y ~1 % mientras suena (sin contar `ffplay`).
 - No porta lo que es de la ventana nativa: teclas multimedia y Now Playing de macOS, y el mini reproductor flotante.
 
@@ -150,6 +155,7 @@ internal/core/         motor sin interfaz: reproducción, cola, likes, playlists
 internal/library/      biblioteca y estado persistente
 internal/player/       backend ffplay
 internal/lastfm/       cliente Last.fm
+internal/lyrics/       letras: LRCLIB, .lrc, etiquetas, parser LRC y caché (compartido con la app)
 internal/ipod/         sincronización con iPod (iTunesDB)
 raycast/               extensión para Raycast / Tinycast
 docs/                  operación y versión de terminal

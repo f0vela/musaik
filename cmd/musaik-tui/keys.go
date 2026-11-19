@@ -51,6 +51,13 @@ func (t *tui) onKey(k tea.KeyPressMsg) tea.Cmd {
 	if t.sec == secSettings && t.settingsKey(s) {
 		return nil
 	}
+	if t.lyr.open && !t.focusSide {
+		// The lists behind the lyrics are not shown: their keys do nothing.
+		if !t.lyricsKey(s) {
+			t.globalKey(s)
+		}
+		return nil
+	}
 	if t.globalKey(s) {
 		return nil
 	}
@@ -127,6 +134,8 @@ func (t *tui) globalKey(s string) bool {
 		t.help = true
 	case "T":
 		t.openThemePicker()
+	case "L":
+		t.toggleLyrics()
 	case "b":
 		t.toggleSidebar()
 	case "M":
@@ -175,6 +184,7 @@ func (t *tui) toggleSidebar() {
 // ---- sections ------------------------------------------------------------------------
 
 func (t *tui) goSection(sec sectionID) {
+	t.lyr.open = false
 	if sec != t.sec {
 		t.artistOpen, t.albumOpen = false, false
 	}
@@ -196,6 +206,7 @@ func (t *tui) goSection(sec sectionID) {
 }
 
 func (t *tui) goPlaylist(name string) {
+	t.lyr.open = false
 	t.artistOpen, t.albumOpen = false, false
 	t.sec = secPlaylist
 	t.playlist = name
@@ -208,6 +219,7 @@ func (t *tui) goPlaylist(name string) {
 }
 
 func (t *tui) openSettings() {
+	t.lyr.open = false
 	if t.sec != secSettings {
 		t.prevSec = t.sec
 	}

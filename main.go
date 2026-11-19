@@ -103,6 +103,7 @@ var (
 	iconDownload  = mustIconoir("download.svg")
 	iconRefresh   = mustIconoir("refresh-circle.svg")
 	iconSidebar   = mustIconoir("sidebar.svg")
+	iconLyrics    = mustIconoir("music-double-note.svg")
 )
 
 type repeatMode string
@@ -141,6 +142,7 @@ type app struct {
 	actionAddSongID           string
 	actionAddPlaylistName     string
 	queueOpen                 bool
+	lyrics                    lyricsPanel
 	queueSongIDs              []string
 	playlistCreateOpen        bool
 	playlistCreateName        string
@@ -546,6 +548,7 @@ func (a *app) view(c *ui.Context) {
 	})
 	c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyM, a.toggleMiniPlayer)
 	c.OnShortcut(ui.Cmd, ui.KeyB, a.toggleSidebar)
+	c.OnShortcut(ui.Cmd, ui.KeyL, a.toggleLyrics)
 	c.OnShortcut(0, ui.KeyEscape, func() {
 		if a.actionOpen {
 			a.actionOpen = false
@@ -571,6 +574,7 @@ func (a *app) view(c *ui.Context) {
 		})
 	})
 	a.viewActionBar(c)
+	a.viewLyricsModal(c)
 	a.viewActionAddToPlaylistModal(c)
 	a.viewPlaylistCreateModal(c)
 	a.viewPlaylistRenameModal(c)
@@ -2484,6 +2488,7 @@ func (a *app) actionHits() []actionHit {
 		{Kind: "action", ActionID: "add-current-song-to-playlist", Title: "Add current playing song to playlist", Subtitle: "Playlist"},
 		{Kind: "action", ActionID: "like-current-song", Title: "Like current playing song", Subtitle: "Favorites"},
 		{Kind: "action", ActionID: "sync-current-song-lastfm", Title: "Sync current song with Last.fm", Subtitle: "Last.fm"},
+		{Kind: "action", ActionID: "lyrics", Title: "Mostrar u ocultar la letra", Subtitle: "Playback • ⌘L", Keywords: "lyrics letra lrc karaoke"},
 		{Kind: "action", ActionID: "settings", Title: "Ajustes", Subtitle: "App • ⌘,"},
 		{Kind: "action", ActionID: "toggle-sidebar", Title: "Mostrar/ocultar barra lateral", Subtitle: "App • ⌘B"},
 		{Kind: "action", ActionID: "quit", Title: "Cerrar Musaik", Subtitle: "App", Keywords: "quit salir cerrar exit"},
@@ -2637,6 +2642,8 @@ func (a *app) applyQuickAction(actionID string) {
 			return
 		}
 		a.syncSongFromLastFM(song, true)
+	case "lyrics":
+		a.toggleLyrics()
 	case "settings":
 		a.openSettingsWindow()
 	case "toggle-sidebar":

@@ -58,6 +58,25 @@ así todos los temas reciben el mismo tratamiento. Un test comprueba el contrast
 La elección se guarda en `tui.json` (junto a `settings.json`), no en `settings.json`: la app de escritorio reescribe
 ese archivo con las claves que conoce y borraría una desconocida. La app de escritorio sigue el tema del sistema.
 
+## Letras
+
+`L` (o «Mostrar u ocultar la letra» en la paleta) sustituye la vista principal por la letra de la canción que suena;
+`L` o `esc` la cierran, y ir a otra sección también. La barra lateral, el reproductor y el resto de teclas
+(`space`, `n`, `p`, `←` `→`, volumen…) siguen funcionando.
+
+- **De dónde sale**, en este orden: un archivo `.lrc` con el nombre del audio y al lado de él, la etiqueta de letra
+  incrustada (que también puede traer tiempos), y [LRCLIB](https://lrclib.net), una base comunitaria gratuita, sin clave.
+  Si el nombre exacto no aparece, busca por título (también sin «(feat. …)» ni «- Remastered») y elige el resultado que
+  dura lo mismo que tu archivo (±4 s), del mismo artista y con tiempos.
+- **Privacidad**: no se consulta nada hasta que abres la letra. LRCLIB recibe título, artista, álbum y duración de la
+  canción. Las respuestas, y también los «no hay», se guardan en `lyrics-cache/` (junto a `settings.json`; los «no hay»
+  caducan a los 7 días), así que cada canción se consulta una sola vez. Si falla la red no se guarda nada y se reintenta
+  a los 20 s (o con `R`).
+- **Sincronizadas**: la línea actual va en el acento y centrada, las pasadas se atenúan. `↑` `↓` `pgup` `pgdn` `g` `G` o la rueda
+  la desplazan a mano y sueltan el seguimiento; `c` lo retoma. **Un clic en una línea salta a ese punto de la canción.**
+  Sin tiempos se muestra el texto, marcado «sin sincronizar».
+- Mientras la letra está abierta, las teclas de las listas (`enter`, `a`, `f`, `N`…) no hacen nada, porque la lista no se ve.
+
 ## Arquitectura
 
 ```
@@ -66,6 +85,7 @@ internal/core        motor sin UI: reproducción, cola, shuffle/repeat, historia
 internal/library     biblioteca y estado persistente      (compartido con la app)
 internal/player      backend ffplay                        (compartido con la app)
 internal/lastfm      cliente Last.fm                       (compartido con la app)
+internal/lyrics      LRCLIB, .lrc, etiquetas, parser, caché (compartido con la app)
 internal/ipod        sincronización iTunesDB               (compartido con la app)
 cmd/musaik-tui       interfaz Bubble Tea
 ```
@@ -98,6 +118,7 @@ vuelve a su goroutine con `Engine.Post`, así que no hay locks ni carreras (`go 
 | Mini reproductor | ventana flotante | pantalla compacta con los colores de la carátula (`M`, `-mini`) |
 | Tema claro/oscuro del sistema | ✓ | ✓ (sigue el fondo de la terminal) |
 | Selector de temas (Dracula, Catppuccin, Tokyo Night, Rosé Pine…) | — | ✓ solo TUI (`T`) |
+| Letras sincronizadas (LRCLIB, `.lrc`, etiqueta incrustada) | ✓ `⌘L` | ✓ (`L`) |
 | Ratón | ✓ | ✓ (filas, barra de progreso, volumen, botones, rueda) |
 
 ### Lo que no se porta
@@ -118,6 +139,7 @@ vuelve a su goroutine con `Engine.Post`, así que no hay locks ni carreras (`go 
 | `+` / `-` , `m` | volumen, silencio |
 | `s` , `r` | shuffle, repeat (off → all → one) |
 | `l` | like a la canción que suena |
+| `L` | letra (ver «Letras») |
 
 | Navegación | |
 |---|---|

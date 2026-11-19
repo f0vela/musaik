@@ -280,6 +280,10 @@ func (a *app) controlsProgress(c *ui.Context, position, duration time.Duration) 
 // controlsVolume draws the mini player and mute buttons and, unless slider is
 // 0, the volume slider: slider > 0 is its width and slider < 0 makes it grow.
 func (a *app) controlsVolume(c *ui.Context, slider float32) {
+	lyricsBtn := barIconButton(c, 24, ui.Transparent, lyricsButtonColor(a.lyrics.open), iconLyrics, 13).Tooltip("Letra (⌘L)")
+	if lyricsBtn.Clicked() {
+		a.toggleLyrics()
+	}
 	miniBtn := barIconButton(c, 24, ui.Transparent, sonoraTextMuted, iconMiniPlayer, 13).Tooltip("Mini reproductor (⇧⌘M)")
 	if miniBtn.Clicked() {
 		a.toggleMiniPlayer()
