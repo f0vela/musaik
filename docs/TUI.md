@@ -64,14 +64,19 @@ ese archivo con las claves que conoce y borraría una desconocida. La app de esc
 `L` o `esc` la cierran, y ir a otra sección también. La barra lateral, el reproductor y el resto de teclas
 (`space`, `n`, `p`, `←` `→`, volumen…) siguen funcionando.
 
-- **De dónde sale**, en este orden: un archivo `.lrc` con el nombre del audio y al lado de él, la etiqueta de letra
-  incrustada (que también puede traer tiempos), y [LRCLIB](https://lrclib.net), una base comunitaria gratuita, sin clave.
-  Si el nombre exacto no aparece, busca por título (también sin «(feat. …)» ni «- Remastered») y elige el resultado que
-  dura lo mismo que tu archivo (±4 s), del mismo artista y con tiempos.
+- **De dónde sale**, en este orden: la etiqueta de letra incrustada en el archivo (puede traer tiempos, en LRC),
+  un archivo `.lrc` con el nombre del audio y al lado de él, y [LRCLIB](https://lrclib.net), una base comunitaria
+  gratuita, sin clave. Si la etiqueta solo tiene texto plano y hay un `.lrc` con tiempos, gana el `.lrc`; con texto
+  plano en la etiqueta y nada más, se usa ese y no se consulta LRCLIB. Si el nombre exacto no aparece en LRCLIB, busca
+  por título (también sin «(feat. …)» ni «- Remastered») y elige el resultado que dura lo mismo que tu archivo (±4 s),
+  del mismo artista y con tiempos.
 - **Privacidad**: no se consulta nada hasta que abres la letra. LRCLIB recibe título, artista, álbum y duración de la
-  canción. Las respuestas, y también los «no hay», se guardan en `lyrics-cache/` (junto a `settings.json`; los «no hay»
-  caducan a los 7 días), así que cada canción se consulta una sola vez. Si falla la red no se guarda nada y se reintenta
-  a los 20 s (o con `R`).
+  canción. Las respuestas, y también los «no hay», se guardan **3 días** en `lyrics-cache/` (junto a `settings.json`),
+  y las caducadas se borran solas. Si falla la red no se guarda nada y se reintenta a los 20 s (o con `R`).
+- **Guardar en el archivo** (`S`): escribe la letra mostrada en la etiqueta de letra del audio (mp3, mp4, flac, ogg),
+  con tiempos si los tiene, sin tocar las demás etiquetas. Desde entonces se lee de ahí, sin red, y su entrada de la
+  caché se borra. Solo aparece para letras descargadas y **nunca es automático**, porque modifica tu archivo. Cierra
+  el archivo en otras apps que lo editen; en mp3 TagLib puede reescribirlo entero si la etiqueta no tiene hueco.
 - **Sincronizadas**: la línea actual va en el acento y centrada, las pasadas se atenúan. `↑` `↓` `pgup` `pgdn` `g` `G` o la rueda
   la desplazan a mano y sueltan el seguimiento; `c` lo retoma. **Un clic en una línea salta a ese punto de la canción.**
   Sin tiempos se muestra el texto, marcado «sin sincronizar».
@@ -118,7 +123,7 @@ vuelve a su goroutine con `Engine.Post`, así que no hay locks ni carreras (`go 
 | Mini reproductor | ventana flotante | pantalla compacta con los colores de la carátula (`M`, `-mini`) |
 | Tema claro/oscuro del sistema | ✓ | ✓ (sigue el fondo de la terminal) |
 | Selector de temas (Dracula, Catppuccin, Tokyo Night, Rosé Pine…) | — | ✓ solo TUI (`T`) |
-| Letras sincronizadas (LRCLIB, `.lrc`, etiqueta incrustada) | ✓ `⌘L` | ✓ (`L`) |
+| Letras sincronizadas (etiqueta, `.lrc`, LRCLIB) y guardarlas en el archivo | ✓ `⌘L` | ✓ (`L`, `S`) |
 | Ratón | ✓ | ✓ (filas, barra de progreso, volumen, botones, rueda) |
 
 ### Lo que no se porta
@@ -139,7 +144,7 @@ vuelve a su goroutine con `Engine.Post`, así que no hay locks ni carreras (`go 
 | `+` / `-` , `m` | volumen, silencio |
 | `s` , `r` | shuffle, repeat (off → all → one) |
 | `l` | like a la canción que suena |
-| `L` | letra (ver «Letras») |
+| `L` / `S` | letra (ver «Letras») / guardarla en el archivo |
 
 | Navegación | |
 |---|---|

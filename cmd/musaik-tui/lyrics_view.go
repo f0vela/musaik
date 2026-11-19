@@ -69,6 +69,10 @@ func (t *tui) lyricsKey(s string) bool {
 		if song, ok := t.nowSong(); ok {
 			t.eng.ForgetLyrics(song.ID)
 		}
+	case "S":
+		if song, ok := t.nowSong(); ok {
+			t.eng.SaveLyricsToTag(song)
+		}
 	default:
 		return false
 	}
@@ -81,8 +85,9 @@ func (t *tui) scrollLyrics(d int) {
 }
 
 // lyricsHeader is the first two lines of the view: what it is, whose song,
-// the keys, and a rule.
-func (t *tui) lyricsHeader(w int, chip, subtitle, hint string) []string {
+// the keys, and a rule. hints are the keys by priority: as many as fit are
+// shown, and the title gives way to them down to a minimum.
+func (t *tui) lyricsHeader(w int, chip, subtitle string, hints ...string) []string {
 	th := t.th
 	left := " " + th.accented().Bold(true).Render("♬ Letra")
 	if chip != "" {
@@ -91,11 +96,13 @@ func (t *tui) lyricsHeader(w int, chip, subtitle, hint string) []string {
 	if subtitle != "" {
 		left += th.subtle().Render("  │  ") + th.dim().Render(subtitle)
 	}
-	right := th.subtle().Render(hint + " ")
-	// The title gives way to the keys, unless there is hardly room for either.
 	line := fit(left, w)
-	if rw := lipgloss.Width(right); rw+24 <= w {
-		line = fit(left, w-rw) + right
+	for n := len(hints); n > 0; n-- {
+		right := th.subtle().Render(strings.Join(hints[:n], " · ") + " ")
+		if rw := lipgloss.Width(right); rw+24 <= w {
+			line = fit(left, w-rw) + right
+			break
+		}
 	}
 	return []string{line, th.fg(th.border).Render(strings.Repeat("─", w))}
 }
@@ -115,15 +122,15 @@ func (t *tui) viewLyrics(w, h, x0, y0 int) []string {
 			subtitle += " — " + song.Artist
 		}
 	}
-	message := func(hint, msg string, detail ...string) []string {
-		out := t.lyricsHeader(w, "", subtitle, hint)
+	message := func(hints []string, msg string, detail ...string) []string {
+		out := t.lyricsHeader(w, "", subtitle, hints...)
 		out = append(out, "", center(th.strong().Render(msg), w))
 		for _, d := range detail {
 			out = append(out, center(th.dim().Render(d), w))
 		}
 		return out
 	}
-	closeHint := "L cerrar"
+	closeHint := []string{"L cerrar"}
 	if !ok {
 		return message(closeHint, "No hay canción")
 	}
@@ -132,9 +139,9 @@ func (t *tui) viewLyrics(w, h, x0, y0 int) []string {
 	case core.LyricsLoading:
 		return message(closeHint, "Buscando letra…", "LRCLIB · lrclib.net")
 	case core.LyricsFailed:
-		return message(closeHint+" · R reintentar", "No se pudo buscar la letra", ent.Err, "Se reintenta solo en unos segundos.")
+		return message([]string{"L cerrar", "R reintentar"}, "No se pudo buscar la letra", ent.Err, "Se reintenta solo en unos segundos.")
 	case core.LyricsNone:
-		return message(closeHint+" · R buscar de nuevo", "No hay letra para esta canción",
+		return message([]string{"L cerrar", "R buscar de nuevo"}, "No hay letra para esta canción",
 			"Pon un archivo .lrc con el nombre del audio al lado, o incrusta la letra en sus etiquetas.")
 	}
 	l := ent.Lyrics
@@ -174,15 +181,27 @@ func (t *tui) viewLyrics(w, h, x0, y0 int) []string {
 	}
 	t.lyr.top = min(max(t.lyr.top, 0), t.lyr.maxTop)
 
-	hint := closeHint + " · ↑↓ mover"
-	if l.IsSynced() {
-		hint += " · c seguir · clic: ir"
-	}
-	chip := ""
+	hints := []string{"L cerrar"}
+	var chips []string
 	if !l.IsSynced() {
-		chip = "sin sincronizar"
+		chips = append(chips, "sin sincronizar")
 	}
-	out := t.lyricsHeader(w, chip, subtitle, hint)
+	switch {
+	case ent.Saving:
+		chips = append(chips, "guardando en el archivo…")
+	case l.CanSave():
+		hints = append(hints, "S guardar en el archivo")
+	case l.Source == "tag":
+		chips = append(chips, "guardada en el archivo")
+	case l.Source == "lrc":
+		chips = append(chips, "del archivo .lrc")
+	}
+	hints = append(hints, "↑↓ mover")
+	if l.IsSynced() {
+		hints = append(hints, "c seguir", "clic: ir")
+	}
+	chip := strings.Join(chips, " · ")
+	out := t.lyricsHeader(w, chip, subtitle, hints...)
 	for r := t.lyr.top; r < min(t.lyr.top+bodyH, len(rows)); r++ {
 		i := line[r]
 		style := th.dim()

@@ -108,3 +108,36 @@ func TestLyricsToggleAndAction(t *testing.T) {
 		t.Fatal("the action bar does not offer the lyrics")
 	}
 }
+
+func TestLyricsFooterOffersSavingOnlyForDownloadedLyrics(t *testing.T) {
+	cases := []struct {
+		name       string
+		data       *lyrics.Lyrics
+		saving     bool
+		wantButton bool
+		wantNote   string
+	}{
+		{"downloaded", &lyrics.Lyrics{Plain: "x", Source: "lrclib"}, false, true, "se guarda 3 días en caché"},
+		{"saving", &lyrics.Lyrics{Plain: "x", Source: "lrclib"}, true, true, "Guardando en el archivo…"},
+		{"in the tag", &lyrics.Lyrics{Plain: "x", Source: "tag"}, false, false, "Guardada en las etiquetas del archivo"},
+		{"from a .lrc", &lyrics.Lyrics{Plain: "x", Source: "lrc"}, false, false, "Del archivo .lrc"},
+		{"instrumental", &lyrics.Lyrics{Instrumental: true, Source: "lrclib"}, false, false, "Letras de LRCLIB"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tt := lyricsTester(lyricsApp(&lyricsResult{state: lyricsReady, data: tc.data, saving: tc.saving}))
+			if got := tt.HasText("Guardar en el archivo"); got != tc.wantButton {
+				t.Errorf("button shown = %v, want %v (%q)", got, tc.wantButton, strings.Join(tt.Texts(), " | "))
+			}
+			found := false
+			for _, s := range tt.Texts() {
+				if strings.Contains(s, tc.wantNote) {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("missing note %q in %q", tc.wantNote, strings.Join(tt.Texts(), " | "))
+			}
+		})
+	}
+}

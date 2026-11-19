@@ -223,7 +223,7 @@ func (t *tui) viewHelp() string {
 		{"Reproducción", []kv{
 			{"space", "play / pausa"}, {"n / p", "siguiente / anterior"},
 			{"← / →", "−5 s / +5 s (shift: 30 s)"}, {"+ / -   m", "volumen · silencio"},
-			{"s   r", "shuffle · repeat (off, all, one)"}, {"l", "like a lo que suena"}, {"L", "letra (sincronizada, LRCLIB)"},
+			{"s   r", "shuffle · repeat (off, all, one)"}, {"l", "like a lo que suena"}, {"L", "letra (LRCLIB, .lrc, etiqueta)"}, {"S", "(en la letra) guardarla en el archivo"},
 		}},
 		{"Navegación", []kv{
 			{"↑ ↓ j k", "mover"}, {"pgup pgdn", "media página"}, {"g / G", "inicio / final"},

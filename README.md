@@ -47,7 +47,8 @@ Musaik es un reproductor de música local escrito en Go. Tiene tres caras que co
   La transparencia del fondo se ajusta en Ajustes → Apariencia.
 - Barra lateral ocultable (`⌘B`).
 - **Letras** (`⌘L` o el botón ♫ de la barra del reproductor): sincronizadas con la canción, la línea actual queda centrada y un clic en una línea salta a ese punto.
-  Busca primero un `.lrc` junto al audio y la etiqueta de letra incrustada, y si no hay, consulta [LRCLIB](https://lrclib.net) (gratis, sin clave). Solo se consulta al abrir la letra y las respuestas se guardan en `~/Library/Application Support/musaik/lyrics-cache`.
+  Busca primero en la etiqueta de letra del archivo, luego en un `.lrc` junto al audio, y solo si no hay consulta [LRCLIB](https://lrclib.net) (gratis, sin clave).
+  Solo se consulta al abrir la letra. Lo descargado se guarda 3 días en `~/Library/Application Support/musaik/lyrics-cache`; el botón **Guardar en el archivo** (o `S` en la terminal) lo escribe en las etiquetas del audio (mp3, mp4, flac, ogg; con tiempos, en formato LRC) para que no dependa de la caché ni de la red.
 - Last.fm:
   - auth automática desde ajustes
   - now playing, scrobble, `track.love`, sync de playcount/liked
@@ -155,7 +156,7 @@ internal/core/         motor sin interfaz: reproducción, cola, likes, playlists
 internal/library/      biblioteca y estado persistente
 internal/player/       backend ffplay
 internal/lastfm/       cliente Last.fm
-internal/lyrics/       letras: LRCLIB, .lrc, etiquetas, parser LRC y caché (compartido con la app)
+internal/lyrics/       letras: etiquetas, .lrc, LRCLIB, parser LRC, caché de 3 días y escritura en etiquetas (compartido con la app)
 internal/ipod/         sincronización con iPod (iTunesDB)
 raycast/               extensión para Raycast / Tinycast
 docs/                  operación y versión de terminal

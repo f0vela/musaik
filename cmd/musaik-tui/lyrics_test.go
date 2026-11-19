@@ -4,11 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"musaik/internal/lyrics"
 )
@@ -197,5 +201,63 @@ func TestLyricsWithNothingPlayingAndPalette(t *testing.T) {
 	tu.applyActionHit(hits[0])
 	if !tu.lyr.open {
 		t.Fatal("the palette action did not open the lyrics")
+	}
+}
+
+func TestLyricsSaveToTheFile(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	path := filepath.Join(t.TempDir(), "a.mp3")
+	if out, err := exec.Command(ffmpeg, "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "1", path).CombinedOutput(); err != nil {
+		t.Skipf("ffmpeg: %v %s", err, out)
+	}
+	tu, _, answer := lyricsTUI(t, syncedBody)
+	tu.eng.Store.Songs[0].Path = path
+	tu.eng.Lyrics.CacheDir = t.TempDir()
+	tu.eng.PlaySongByID("id0")
+	tu.press("L")
+	answer()
+	s := tu.screen()
+	if !strings.Contains(s, "S guardar en el archivo") {
+		t.Fatalf("no hint to save:\n%s", s)
+	}
+	tu.press("S")
+	if s := tu.screen(); !strings.Contains(s, "guardando en el archivo") {
+		t.Fatalf("not saving:\n%s", s)
+	}
+	answer()
+	s = tu.screen()
+	if !strings.Contains(s, "guardada en el archivo") || strings.Contains(s, "S guardar") {
+		t.Fatalf("after saving:\n%s", s)
+	}
+	if !strings.Contains(s, "Letra guardada en las etiquetas") {
+		t.Fatalf("no status message:\n%s", s)
+	}
+	if l := lyrics.Local(path); l == nil || l.Source != "tag" || len(l.Synced) != 4 {
+		t.Fatalf("the file has no lyrics: %+v", l)
+	}
+	// Pressing S again has nothing to save.
+	tu.press("S")
+	if !strings.Contains(tu.eng.Status, "No hay una letra descargada") {
+		t.Fatalf("status: %q", tu.eng.Status)
+	}
+}
+
+func TestLyricsHeaderKeepsTheMostImportantKeys(t *testing.T) {
+	tu, _ := newTestTUI(t, 100, 30)
+	long := "Una canción con un título bastante largo — Un artista"
+	for _, w := range []int{60, 80, 100} {
+		line := ansi.Strip(tu.lyricsHeader(w, "", long, "L cerrar", "S guardar en el archivo", "↑↓ mover", "c seguir")[0])
+		if got := lipgloss.Width(line); got != w {
+			t.Fatalf("w=%d: header is %d wide", w, got)
+		}
+		if w >= 80 && !strings.Contains(line, "S guardar en el archivo") {
+			t.Fatalf("w=%d: the save key was dropped: %q", w, line)
+		}
+		if w >= 100 && !strings.Contains(line, "c seguir") {
+			t.Fatalf("w=%d: all keys fit but were dropped: %q", w, line)
+		}
 	}
 }

@@ -34,7 +34,9 @@ type lyricsResult struct {
 	state lyricsState
 	data  *lyrics.Lyrics
 	err   string
-	at    time.Time
+	// saving is true while the lyrics are being written into the audio file.
+	saving bool
+	at     time.Time
 }
 
 // lyricsPanel is the lyrics window: which song it shows, the lookups so far,
@@ -90,7 +92,7 @@ func (a *app) lyricsFor(song model.Song) lyricsResult {
 	pending := &lyricsResult{state: lyricsLoading, at: time.Now()}
 	lp.cache[song.ID] = pending
 	client := lp.client
-	q := lyrics.Query{Title: song.Title, Artist: song.Artist, Album: song.Album, Duration: song.Duration, Path: song.Path}
+	q := lyricsQuery(song)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -111,6 +113,40 @@ func (a *app) lyricsFor(song model.Song) lyricsResult {
 		})
 	}()
 	return *pending
+}
+
+func lyricsQuery(song model.Song) lyrics.Query {
+	return lyrics.Query{Title: song.Title, Artist: song.Artist, Album: song.Album, Duration: song.Duration, Path: song.Path}
+}
+
+// saveLyricsToTag writes the lyrics being shown into the lyrics tag of the
+// song's file (with times, as LRC, when it has them), so they no longer depend
+// on the cache or the network. It only runs when the user asks.
+func (a *app) saveLyricsToTag(song model.Song) {
+	lp := &a.lyrics
+	res := lp.cache[song.ID]
+	if res == nil || res.state != lyricsReady || !res.data.CanSave() || res.saving {
+		return
+	}
+	res.saving = true
+	l, client, q := res.data, lp.client, lyricsQuery(song)
+	go func() {
+		err := lyrics.SaveToTag(song.Path, l)
+		a.updateUI(func() {
+			res.saving = false
+			if err != nil {
+				a.status = "No se pudo guardar la letra: " + err.Error()
+				return
+			}
+			if client != nil {
+				client.Forget(q)
+			}
+			saved := *l
+			saved.Source = "tag"
+			res.data = &saved
+			a.status = "Letra guardada en las etiquetas de «" + song.Title + "»"
+		})
+	}()
 }
 
 func lyricsButtonColor(open bool) ui.Color {
@@ -152,9 +188,41 @@ func (a *app) viewLyricsModal(c *ui.Context) {
 				ui.Box(c).Height(lyricsViewH).Children(func() {
 					a.viewLyricsBody(c, song, hasSong)
 				})
-				ui.Text(c, "Letras de LRCLIB · clic en una línea para ir a ese punto").
-					SingleLine().FontSize(fs(11)).TextColor(sonoraTextTertiary)
+				a.viewLyricsFooter(c, song, hasSong)
 			})
+	})
+}
+
+// viewLyricsFooter says where the lyrics come from and, for those downloaded,
+// offers to write them into the file.
+func (a *app) viewLyricsFooter(c *ui.Context, song model.Song, hasSong bool) {
+	var res *lyricsResult
+	if hasSong {
+		res = a.lyrics.cache[song.ID]
+	}
+	note := "Letras de LRCLIB · clic en una línea para ir a ese punto"
+	canSave, saving := false, false
+	if res != nil && res.state == lyricsReady && res.data != nil {
+		switch {
+		case res.saving:
+			note, saving = "Guardando en el archivo…", true
+		case res.data.CanSave():
+			note, canSave = "De LRCLIB · se guarda 3 días en caché, o para siempre en el archivo", true
+		case res.data.Source == "tag":
+			note = "Guardada en las etiquetas del archivo"
+		case res.data.Source == "lrc":
+			note = "Del archivo .lrc junto a la canción"
+		}
+	}
+	ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+		ui.Text(c, note).Grow(1).MinWidth(0).SingleLine().FontSize(fs(11)).TextColor(sonoraTextTertiary)
+		if canSave || saving {
+			btn := ui.Button(c, "Guardar en el archivo").Disabled(saving).
+				Tooltip("Escribe la letra en las etiquetas del archivo de audio")
+			if btn.Clicked() {
+				a.saveLyricsToTag(song)
+			}
+		}
 	})
 }
 

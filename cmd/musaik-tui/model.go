@@ -16,7 +16,7 @@ import (
 
 // version is shown in Settings > About; it follows the desktop app's mygo.json,
 // and a build can set it: -ldflags "-X main.version=1.2.3".
-var version = "0.4.6"
+var version = "0.4.7"
 
 type sectionID int
 

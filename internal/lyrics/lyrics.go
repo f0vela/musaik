@@ -1,9 +1,10 @@
 // Package lyrics finds the lyrics of a song and follows them as it plays.
 //
-// They come from, in order: a .lrc file next to the audio file, the lyrics
-// tag embedded in it, and LRCLIB (https://lrclib.net), a free community
-// database that needs no key and has time-synced lyrics. Answers from LRCLIB
-// are cached on disk, misses too (for a while), so a song is looked up once.
+// They come from, in order: the lyrics tag embedded in the audio file, a .lrc
+// file next to it, and LRCLIB (https://lrclib.net), a free community database
+// that needs no key and has time-synced lyrics. Answers from LRCLIB are cached
+// on disk for three days, misses too, so a song is not looked up again at
+// every play; SaveToTag makes them permanent by writing them into the file.
 // Nothing is sent anywhere until Fetch is called, which the apps only do when
 // the user opens the lyrics.
 package lyrics
@@ -24,9 +25,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dhowden/tag"
+	"go.senan.xyz/taglib"
 )
 
 // ErrNotFound is returned when no source has lyrics for the song.
@@ -182,17 +185,39 @@ func plainOf(lines []Line) string {
 
 // ---- local sources -----------------------------------------------------------------
 
-// Local looks for lyrics on the user's disk: a .lrc with the audio file's
-// name, then the lyrics tag embedded in it. It returns nil when there is none.
+// Local looks for lyrics on the user's disk: the lyrics tag embedded in the
+// audio file first, then a .lrc with its name next to it. When the tag only has
+// plain text and the .lrc has times, the .lrc wins. It returns nil when there
+// is none.
 func Local(path string) *Lyrics {
 	if path == "" {
 		return nil
 	}
-	if data, err := os.ReadFile(strings.TrimSuffix(path, filepath.Ext(path)) + ".lrc"); err == nil {
-		if l := fromText(string(data), "lrc"); l != nil {
-			return l
-		}
+	fromTag := readTag(path)
+	if fromTag.IsSynced() {
+		return fromTag
 	}
+	var fromFile *Lyrics
+	if data, err := os.ReadFile(strings.TrimSuffix(path, filepath.Ext(path)) + ".lrc"); err == nil {
+		fromFile = fromText(string(data), "lrc")
+	}
+	if fromFile.IsSynced() || fromTag == nil {
+		return fromFile
+	}
+	return fromTag
+}
+
+// readTag reads the lyrics tag of an audio file (LRC text in it is parsed).
+func readTag(path string) *Lyrics {
+	if tags, err := taglib.ReadTags(path); err == nil {
+		for _, v := range tags[taglib.Lyrics] {
+			if l := fromText(v, "tag"); l != nil {
+				return l
+			}
+		}
+		return nil
+	}
+	// TagLib could not open it: try the other reader before giving up.
 	f, err := os.Open(path)
 	if err != nil {
 		return nil
@@ -205,13 +230,51 @@ func Local(path string) *Lyrics {
 	return fromText(meta.Lyrics(), "tag")
 }
 
+// LRC is the lyrics as LRC text ("[01:23.45]words"), or the plain text when
+// they have no times.
+func (l *Lyrics) LRC() string {
+	if l == nil {
+		return ""
+	}
+	if len(l.Synced) == 0 {
+		return strings.TrimSpace(l.Plain)
+	}
+	var sb strings.Builder
+	for _, ln := range l.Synced {
+		cs := int(ln.At.Round(10*time.Millisecond) / (10 * time.Millisecond))
+		fmt.Fprintf(&sb, "[%02d:%02d.%02d]%s\n", cs/6000, cs/100%60, cs%100, ln.Text)
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+// CanSave reports whether SaveToTag has something to do: lyrics that came
+// from the network and have text.
+func (l *Lyrics) CanSave() bool {
+	return l != nil && l.Source == "lrclib" && !l.Instrumental && l.LRC() != ""
+}
+
+// SaveToTag writes the lyrics into the lyrics tag of the audio file (mp3,
+// mp4, flac, ogg), with times when it has them, leaving the other tags as
+// they are. The next Local finds them there.
+func SaveToTag(path string, l *Lyrics) error {
+	text := l.LRC()
+	if text == "" || l.Instrumental {
+		return errors.New("no hay letra que guardar")
+	}
+	if err := taglib.WriteTags(path, map[string][]string{taglib.Lyrics: {text}}, 0); err != nil {
+		return fmt.Errorf("no se pudo escribir en el archivo: %w", err)
+	}
+	return nil
+}
+
 // ---- LRCLIB -------------------------------------------------------------------------
 
 // DefaultBaseURL is LRCLIB's API.
 const DefaultBaseURL = "https://lrclib.net/api"
 
 const (
-	missTTL       = 7 * 24 * time.Hour
+	// cacheTTL is how long an answer from LRCLIB, or its absence, is kept.
+	cacheTTL      = 3 * 24 * time.Hour
 	requestTimout = 10 * time.Second
 	// durationSlack is how far a search result's length may be from the
 	// song's and still count as the same recording.
@@ -227,6 +290,8 @@ type Client struct {
 	// CacheDir keeps answers on disk; "" turns the cache off.
 	CacheDir string
 	HTTP     *http.Client
+
+	sweepOnce sync.Once
 }
 
 // NewClient is a client that caches under the user's config directory, next
@@ -297,11 +362,32 @@ func (c *Client) readCache(q Query) (*Lyrics, bool) {
 	if json.Unmarshal(data, &e) != nil {
 		return nil, false
 	}
-	if l := e.lyrics(); l != nil {
-		return l, true
+	if time.Since(e.At) >= cacheTTL {
+		_ = os.Remove(path)
+		return nil, false
 	}
-	// A cached miss only holds for a while: the database grows.
-	return nil, time.Since(e.At) < missTTL
+	return e.lyrics(), true
+}
+
+// Forget drops what is cached for q, as when its lyrics now live in the file.
+func (c *Client) Forget(q Query) {
+	if path := c.cachePath(q); path != "" {
+		_ = os.Remove(path)
+	}
+}
+
+// sweep deletes the cached answers that have expired; it runs once, with the
+// first write, so entries of songs never asked again do not pile up.
+func (c *Client) sweep() {
+	entries, err := os.ReadDir(c.CacheDir)
+	if err != nil {
+		return
+	}
+	for _, de := range entries {
+		if info, err := de.Info(); err == nil && time.Since(info.ModTime()) >= cacheTTL {
+			_ = os.Remove(filepath.Join(c.CacheDir, de.Name()))
+		}
+	}
 }
 
 func (c *Client) writeCache(q Query, e cacheEntry) {
@@ -312,6 +398,7 @@ func (c *Client) writeCache(q Query, e cacheEntry) {
 	if os.MkdirAll(filepath.Dir(path), 0o755) != nil {
 		return
 	}
+	c.sweepOnce.Do(c.sweep)
 	e.At = time.Now()
 	if data, err := json.Marshal(e); err == nil {
 		_ = os.WriteFile(path, data, 0o644)
