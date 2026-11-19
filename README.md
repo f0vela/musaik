@@ -3,7 +3,7 @@
 Musaik es un reproductor de música local escrito en Go. Tiene tres caras que comparten la misma biblioteca, playlists, likes y ajustes:
 
 - **App de escritorio nativa para macOS** ([Mygo](https://github.com/egoist/mygo)): biblioteca, playlists, queue, mini reproductor flotante e integración con macOS.
-- **Versión de terminal** (`musaik-tui`, Bubble Tea + Lip Gloss): la misma app en la terminal, con carátulas a resolución completa en kitty y Ghostty y 20 temas.
+- **Versión de terminal** (`musaik-tui`, Bubble Tea + Lip Gloss): la misma app en la terminal, con carátulas a resolución completa en kitty, Ghostty y Rex y 20 temas.
 - **Extensión para Raycast / Tinycast**: controla Musaik desde el launcher.
 
 ## Screenshots
@@ -76,7 +76,7 @@ Musaik es un reproductor de música local escrito en Go. Tiene tres caras que co
 - Go 1.27+
 - Mygo CLI (se usa con `go tool mygo`)
 - `ffplay` y `ffprobe`
-- Para la versión de terminal: una terminal con color de 24 bits (y kitty ≥ 0.28 o Ghostty para las carátulas a resolución completa)
+- Para la versión de terminal: una terminal con color de 24 bits (y kitty ≥ 0.28, Ghostty o Rex para las carátulas a resolución completa)
 - Para la extensión: Node.js y npm
 
 Orden de resolución para `ffplay/ffprobe`:
@@ -138,7 +138,7 @@ go build -o dist/musaik-tui ./cmd/musaik-tui
 ```
 
 - Todo desde el teclado, y también con el ratón (filas, barra de progreso, volumen, botones, rueda). `?` muestra todos los atajos; `ctrl+p` abre la paleta de comandos.
-- **Carátulas a resolución completa** en kitty y Ghostty (protocolo gráfico de Kitty con *Unicode placeholders*); en cualquier otra terminal, en medio bloque.
+- **Carátulas a resolución completa** en kitty, Ghostty y Rex (protocolo gráfico de Kitty con *Unicode placeholders*); en cualquier otra terminal, en medio bloque.
 - **20 temas** (`T`): Dracula, Catppuccin (Mocha, Macchiato, Frappé, Latte), Tokyo Night (Night, Storm, Day), Rosé Pine (con Moon y Dawn), Gruvbox, Nord, Solarized, One Dark, Kanagawa y los dos de Sonora (la paleta de la app de escritorio), más la opción «Automático», que sigue el fondo de la terminal.
 - **Mini reproductor** (`M`): tarjeta compacta con los colores de la carátula.
 - **Letras** (`L`): sincronizadas con LRCLIB, `.lrc` locales o etiqueta incrustada; la línea actual sigue a la canción, y se puede desplazar y hacer clic para saltar.

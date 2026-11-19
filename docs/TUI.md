@@ -23,7 +23,7 @@ Hay dos modos, y `-images` (o `MUSAIK_IMAGES`) elige: `auto` (por defecto), `kit
 - **`kitty`** — imágenes nítidas a resolución completa con el protocolo gráfico de Kitty y *Unicode placeholders*:
   la imagen se envía una vez a la terminal (PNG, hasta 640 px) y en pantalla van celdas de texto que la terminal
   sustituye por la imagen. Al ser texto, se comportan bien con modales, scroll y el renderizador de Bubble Tea.
-  `auto` lo activa en **kitty** y **Ghostty**. Requisitos: kitty ≥ 0.28 o Ghostty, y color de 24 bits (`COLORTERM=truecolor`,
+  `auto` lo activa en **kitty**, **Ghostty** y **Rex** (por `TERM`/`TERM_PROGRAM`; en cualquier otra terminal que soporte el protocolo, `-images kitty`). Requisitos: kitty ≥ 0.28, Ghostty o Rex, y color de 24 bits (`COLORTERM=truecolor`,
   que ambas definen). Mientras la imagen llega se muestra la versión en bloques, y al salir se liberan todas.
 - **`blocks`** — medio bloque (`▀`, dos píxeles por celda): funciona en cualquier terminal con color de 24 bits
   (iTerm2, WezTerm, Terminal.app reciente…) pero es de baja resolución, porque una carátula de 8×4 celdas son 8×8 píxeles.

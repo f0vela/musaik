@@ -21,7 +21,7 @@ import (
 func main() {
 	mini := flag.Bool("mini", false, "start in mini player mode")
 	root := flag.String("root", "", "music folder to index (default: the saved one)")
-	images := flag.String("images", os.Getenv("MUSAIK_IMAGES"), "how covers are drawn: auto, kitty or blocks (default auto: kitty graphics in kitty and Ghostty)")
+	images := flag.String("images", os.Getenv("MUSAIK_IMAGES"), "how covers are drawn: auto, kitty or blocks (default auto: kitty graphics in kitty, Ghostty and Rex)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {

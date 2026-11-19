@@ -25,7 +25,7 @@ const (
 	// protoKitty sends the image to the terminal once, in full resolution,
 	// and shows it with Unicode placeholders: ordinary text cells that the
 	// terminal replaces with the image. Being text, they scroll, get covered by
-	// panels and survive Bubble Tea's cell renderer. kitty and Ghostty draw them.
+	// panels and survive Bubble Tea's cell renderer. kitty, Ghostty and Rex draw them.
 	protoKitty
 )
 
@@ -40,8 +40,9 @@ const (
 )
 
 // detectImages picks the image protocol: mode is "auto", "kitty" or "blocks".
-// Auto turns kitty graphics on for kitty and Ghostty; inside tmux or screen the
-// escape sequences would need passthrough, so it keeps to blocks there.
+// Auto turns kitty graphics on for kitty, Ghostty and Rex (which is built on
+// libghostty); inside tmux or screen the escape sequences would need
+// passthrough, so it keeps to blocks there.
 func detectImages(mode string) imgProto {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "blocks", "off", "none", "0":
@@ -58,7 +59,9 @@ func detectImages(mode string) imgProto {
 		strings.Contains(term, "kitty"),
 		strings.Contains(term, "ghostty"),
 		strings.EqualFold(prog, "ghostty"),
-		os.Getenv("GHOSTTY_RESOURCES_DIR") != "":
+		os.Getenv("GHOSTTY_RESOURCES_DIR") != "",
+		strings.EqualFold(prog, "rex"),
+		strings.HasPrefix(term, "xterm-rex"):
 		return protoKitty
 	}
 	return protoBlocks

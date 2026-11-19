@@ -165,6 +165,8 @@ func TestDetectImages(t *testing.T) {
 		{"kitty by TERM", map[string]string{"TERM": "xterm-kitty"}, "", protoKitty},
 		{"ghostty by TERM_PROGRAM", map[string]string{"TERM_PROGRAM": "ghostty"}, "auto", protoKitty},
 		{"ghostty by TERM", map[string]string{"TERM": "xterm-ghostty"}, "auto", protoKitty},
+		{"rex by TERM_PROGRAM", map[string]string{"TERM_PROGRAM": "rex"}, "auto", protoKitty},
+		{"rex by TERM", map[string]string{"TERM": "xterm-rex"}, "auto", protoKitty},
 		{"inside tmux stays on blocks", map[string]string{"KITTY_WINDOW_ID": "3", "TMUX": "/tmp/tmux-1/default,1,0"}, "auto", protoBlocks},
 		{"blocks wins", map[string]string{"KITTY_WINDOW_ID": "3"}, "blocks", protoBlocks},
 		{"kitty can be forced", nil, "kitty", protoKitty},
