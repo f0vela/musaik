@@ -44,6 +44,15 @@ func main() {
 		}()
 	}
 
+	if path := os.Getenv("MUSAIK_CPU_PROFILE"); path != "" {
+		// A CPU profile of the whole session, written when the app exits normally.
+		if f, err := os.Create(path); err == nil {
+			if pprof.StartCPUProfile(f) == nil {
+				defer func() { pprof.StopCPUProfile(); f.Close() }()
+			}
+		}
+	}
+
 	eng := core.New(player.New())
 	if *root != "" {
 		eng.Settings.RootInput = *root
@@ -51,6 +60,7 @@ func main() {
 	t := newTUI(eng, *mini)
 	t.setImageProto(detectImages(*images))
 	t.cacheViews = true
+	t.enableVisualizer()
 	// 30 frames a second is plenty for a terminal, and when a key is held down the
 	// renderer coalesces the updates in between instead of drawing every one.
 	prog := tea.NewProgram(t, tea.WithFPS(30))
@@ -84,6 +94,7 @@ func main() {
 	_ = eng.Persist()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "musaik-tui:", err)
+		pprof.StopCPUProfile()
 		os.Exit(1)
 	}
 }

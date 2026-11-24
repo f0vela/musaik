@@ -29,7 +29,8 @@ func themeIndex(id string) int {
 func (t *tui) setTheme(id string) {
 	t.themeID = id
 	t.applyTheme()
-	if err := (tuiPrefs{Theme: id}).save(); err != nil {
+	t.prefs.Theme = id
+	if err := t.prefs.save(); err != nil {
 		t.eng.Status = "No se pudo guardar el tema: " + err.Error()
 		return
 	}

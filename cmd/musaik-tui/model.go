@@ -16,7 +16,7 @@ import (
 
 // version is shown in Settings > About; it follows the desktop app's mygo.json,
 // and a build can set it: -ldflags "-X main.version=1.2.3".
-var version = "0.4.8"
+var version = "0.4.9"
 
 type sectionID int
 
@@ -237,6 +237,8 @@ type tui struct {
 	artPx int // longest side, in pixels, that covers are decoded at
 	kitty kittyState
 
+	prefs    tuiPrefs
+	viz      vizState
 	themeID  string
 	termDark bool // whether the terminal's own background is dark, for the auto theme
 
@@ -268,10 +270,13 @@ const (
 )
 
 func newTUI(eng *core.Engine, mini bool) *tui {
+	prefs := loadPrefs()
 	t := &tui{
 		eng:        eng,
 		th:         newTheme(true),
-		themeID:    loadPrefs().Theme,
+		prefs:      prefs,
+		viz:        vizState{style: prefs.Visualizer},
+		themeID:    prefs.Theme,
 		termDark:   true,
 		w:          100,
 		h:          30,
@@ -306,17 +311,25 @@ func newTUI(eng *core.Engine, mini bool) *tui {
 
 func (t *tui) Init() tea.Cmd {
 	t.refreshStats()
-	return tea.Batch(tea.RequestBackgroundColor, tickCmd(false), t.artCmds())
+	return tea.Batch(tea.RequestBackgroundColor, tickCmd(tickIdle), t.artCmds())
 }
 
 // tickCmd schedules the next clock tick. The clock only moves while a song plays
 // (the bar and the time change once a second), so an idle app wakes up rarely.
-func tickCmd(playing bool) tea.Cmd {
-	every := tickIdle
-	if playing {
-		every = tickPlaying
-	}
+func tickCmd(every time.Duration) tea.Cmd {
 	return tea.Tick(every, func(at time.Time) tea.Msg { return tickMsg(at) })
+}
+
+// tickInterval is how long to wait for the next tick: 50 ms while the
+// visualizer is moving, half a second while a song plays, a second otherwise.
+func (t *tui) tickInterval() time.Duration {
+	switch {
+	case t.vizBusy():
+		return vizTick
+	case t.isPlaying():
+		return tickPlaying
+	}
+	return tickIdle
 }
 
 func (t *tui) isPlaying() bool {
@@ -339,7 +352,7 @@ func (t *tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if t.onTick() {
 			t.dirty = true
 		}
-		cmds = append(cmds, tickCmd(t.isPlaying()))
+		cmds = append(cmds, tickCmd(t.tickInterval()))
 	case playerEventMsg:
 		t.eng.HandleEvent(player.Event(msg))
 		t.rowsDirty = true
@@ -403,6 +416,9 @@ func (t *tui) onTick() (changed bool) {
 	pos := int(st.Position / time.Second)
 	changed = pos != t.lastPos || state != t.lastPlay ||
 		e.Status != status || e.PlayingID != playing || e.IPodDetected != detected || e.IPodName != name
+	if t.vizEnabled() && t.updateViz() {
+		changed = true
+	}
 	t.lastPos, t.lastPlay = pos, state
 	return changed
 }

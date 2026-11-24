@@ -354,7 +354,9 @@ func (t *tui) miniKey(s string) {
 	case "q":
 		t.quit()
 	case "M", "esc":
-		t.mini = false
+		t.setMini(false)
+	case "v":
+		t.cycleViz(1)
 	case "space":
 		e.TogglePlayPause()
 	case "n":
@@ -415,17 +417,35 @@ func (t *tui) viewMini() string {
 	}
 
 	wide := w >= 64 && h < 22
-	var coverCols, coverRows, cardW, cardH, textW int
+	var coverCols, coverRows, cardW, cardH, textW, vr int
+	var tight bool
 	if wide {
 		coverRows = min(h-4, 12)
 		coverCols = coverRows * 2
 		textW = min(w-coverCols-8, 44)
 		cardW, cardH = coverCols+3+textW, coverRows
+		vr = t.miniVizRows(h, true, coverRows)
 	} else {
-		coverCols = max(min(w-8, (h-11)*2, 44), 8)
+		// The visualizer takes its rows from the cover.
+		vr = t.miniVizRows(h, false, 0)
+		extra := 0
+		if vr > 0 {
+			extra = vr + 1
+		}
+		coverCols = max(min(w-8, (h-11-extra)*2, 44), 8)
 		coverRows = coverCols / 2
 		textW = max(coverCols, min(w-4, 36))
-		cardW, cardH = textW, coverRows+7
+		cardW, cardH = textW, coverRows+7+extra
+		// On a terminal too short for the spacing, the blank lines between the
+		// parts go, so the controls stay on screen.
+		if tight = cardH > h-1 && vr == 0; tight {
+			cardH = coverRows + 4
+		}
+	}
+	// extra is the room the visualizer and the gap after it add to the card.
+	extra := 0
+	if vr > 0 {
+		extra = vr + 1
 	}
 	cx, cy := max((w-cardW)/2, 0), max((h-cardH)/2, 0)
 
@@ -458,11 +478,19 @@ func (t *tui) viewMini() string {
 				info[i] = s
 			}
 		}
+		if vr > 0 {
+			top = (coverRows - (6 + extra)) / 2
+		}
 		set(top, paint(th.text).Bold(true).Render(text(name, "", textW)))
 		set(top+1, paint(th.muted).Render(text(artist+"  "+heart, "", textW)))
-		set(top+3, progress(tx, cy+top+3, textW))
-		tr, _ := t.transport(paint, bright(accent), accent, nil, tx, cy+top+5)
-		set(top+5, tr)
+		if vr > 0 {
+			for i, line := range t.vizLines(textW, vr, a1, a2, bd) {
+				set(top+3+i, line)
+			}
+		}
+		set(top+3+extra, progress(tx, cy+top+3+extra, textW))
+		tr, _ := t.transport(paint, bright(accent), accent, nil, tx, cy+top+5+extra)
+		set(top+5+extra, tr)
 		for i := 0; i < coverRows; i++ {
 			card = append(card, art[i]+paint(th.text).Render("   ")+padBg(info[i], textW, bd))
 		}
@@ -471,16 +499,31 @@ func (t *tui) viewMini() string {
 			left := max((cardW-width)/2, 0)
 			return padBg(paint(th.text).Render(strings.Repeat(" ", left))+s, cardW, bd)
 		}
+		gap := func() {
+			if !tight {
+				card = append(card, padBg("", cardW, bd))
+			}
+		}
 		for i := 0; i < coverRows; i++ {
 			card = append(card, pad(art[i], coverCols))
 		}
-		card = append(card, padBg("", cardW, bd))
+		gap()
 		card = append(card, padBg(paint(th.text).Bold(true).Render(text(name, "center", cardW)), cardW, bd))
 		card = append(card, padBg(paint(th.muted).Render(text(artist+"  "+heart, "center", cardW)), cardW, bd))
-		card = append(card, padBg("", cardW, bd))
-		card = append(card, padBg(progress(cx, cy+coverRows+4, cardW), cardW, bd))
-		card = append(card, padBg("", cardW, bd))
-		tr, _ := t.transport(paint, bright(accent), accent, nil, cx+max((cardW-ctlW)/2, 0), cy+coverRows+6)
+		gap()
+		if vr > 0 {
+			for _, line := range t.vizLines(cardW, vr, a1, a2, bd) {
+				card = append(card, line)
+			}
+			card = append(card, padBg("", cardW, bd))
+		}
+		progressY, controlsY := cy+coverRows+4+extra, cy+coverRows+6+extra
+		if tight {
+			progressY, controlsY = cy+coverRows+2, cy+coverRows+3
+		}
+		card = append(card, padBg(progress(cx, progressY, cardW), cardW, bd))
+		gap()
+		tr, _ := t.transport(paint, bright(accent), accent, nil, cx+max((cardW-ctlW)/2, 0), controlsY)
 		card = append(card, pad(tr, ctlW))
 	}
 
@@ -494,7 +537,7 @@ func (t *tui) viewMini() string {
 			lines[y] = padBg(paint(th.text).Render(strings.Repeat(" ", cx))+line, w, bd)
 		}
 	}
-	hint := "M volver · espacio · n/p · ←/→ · +/- · l ♥"
+	hint := "M volver · espacio · n/p · ←/→ · +/- · l ♥ · v viz"
 	lines[h-1] = padBg(paint(th.faint).Render(center(hint, w)), w, bd)
 	return strings.Join(lines, "\n")
 }

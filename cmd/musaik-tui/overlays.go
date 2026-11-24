@@ -241,7 +241,7 @@ func (t *tui) viewHelp() string {
 		}},
 		{"App", []kv{
 			{"ctrl+p  :", "paleta de comandos"}, {",", "ajustes"}, {"b", "barra lateral"},
-			{"M", "mini reproductor"}, {"T", "elegir tema"}, {"ctrl+r", "reindexar biblioteca"}, {"I", "iPod: detectar / sincronizar"},
+			{"M", "mini reproductor"}, {"v", "visualizador (en el mini)"}, {"T", "elegir tema"}, {"ctrl+r", "reindexar biblioteca"}, {"I", "iPod: detectar / sincronizar"},
 			{"?", "esta ayuda"}, {"q", "salir"},
 		}},
 	}

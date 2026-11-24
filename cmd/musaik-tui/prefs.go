@@ -13,6 +13,9 @@ import (
 // knows and would drop one it does not.
 type tuiPrefs struct {
 	Theme string `json:"theme"`
+	// Visualizer is the style of the mini player's visualizer: bars, mirror,
+	// wave or off.
+	Visualizer string `json:"visualizer"`
 }
 
 func prefsPath() (string, error) {
@@ -24,7 +27,7 @@ func prefsPath() (string, error) {
 }
 
 func loadPrefs() tuiPrefs {
-	p := tuiPrefs{Theme: themeAuto}
+	p := tuiPrefs{Theme: themeAuto, Visualizer: "bars"}
 	path, err := prefsPath()
 	if err != nil {
 		return p
@@ -37,6 +40,7 @@ func loadPrefs() tuiPrefs {
 	if themeDefByID(p.Theme).id != p.Theme {
 		p.Theme = themeAuto
 	}
+	p.Visualizer = validVizStyle(p.Visualizer)
 	return p
 }
 

@@ -92,6 +92,7 @@ func (t *tui) settingsFields() []sfield {
 			{kind: "select", id: "theme", label: "Tema (enter: elegir)", text: themeDefByID(t.themeID).label},
 			{kind: "info", text: fmt.Sprintf("Modo %s. «Automático» sigue el fondo de la terminal; los demás fijan su propio fondo mientras la app corre.", mode)},
 			{kind: "toggle", id: "sidebar", label: "Barra lateral", text: sidebar},
+			{kind: "select", id: "viz", label: "Visualizador (mini)", text: vizLabels[t.viz.style]},
 			{kind: "head", label: "Mini reproductor"},
 			{kind: "info", text: "Tecla M: tarjeta compacta con los colores de la carátula. La opacidad es cosa de la ventana de la app de escritorio; aquí la terminal manda."},
 		}
@@ -200,6 +201,10 @@ func (t *tui) settingsTab(d int) {
 func (t *tui) cycleSelect(id string, d int) {
 	if id == "theme" {
 		t.cycleTheme(d)
+		return
+	}
+	if id == "viz" {
+		t.cycleViz(d)
 		return
 	}
 	if id != "ipod_playlist" {

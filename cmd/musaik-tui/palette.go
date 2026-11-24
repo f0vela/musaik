@@ -61,6 +61,7 @@ func (t *tui) actionHits() []actionHit {
 		{Kind: "action", ActionID: "reindex", Title: "Reindexar biblioteca", Subtitle: "Biblioteca • ctrl+r"},
 		{Kind: "action", ActionID: "ipod", Title: "iPod: detectar / sincronizar", Subtitle: "iPod • I"},
 		{Kind: "action", ActionID: "mini", Title: "Mini reproductor", Subtitle: "App • M"},
+		{Kind: "action", ActionID: "visualizer", Title: "Visualizador: cambiar estilo", Subtitle: "Mini • v", Keywords: "visualizer visualizador espectro ecualizador barras onda espejo"},
 		{Kind: "action", ActionID: "lyrics", Title: "Mostrar u ocultar la letra", Subtitle: "Playback • L", Keywords: "lyrics letra lrc karaoke"},
 		{Kind: "action", ActionID: "theme", Title: "Cambiar tema…", Subtitle: "App • T", Keywords: "theme tema colores dracula catppuccin tokyo rose pine gruvbox nord solarized"},
 		{Kind: "action", ActionID: "settings", Title: "Ajustes", Subtitle: "App • ,"},
@@ -178,7 +179,9 @@ func (t *tui) applyQuickAction(id string) {
 	case "ipod":
 		t.ipodAction()
 	case "mini":
-		t.mini = true
+		t.setMini(true)
+	case "visualizer":
+		t.cycleViz(1)
 	case "theme":
 		t.openThemePicker()
 	case "lyrics":

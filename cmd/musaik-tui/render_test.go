@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -51,10 +53,26 @@ func ansiToImage(s string, cw, ch int, defBg color.RGBA) *image.RGBA {
 			}
 			cell := image.Rect(x*cw, y*ch, (x+w)*cw, (y+1)*ch)
 			draw.Draw(img, cell, &image.Uniform{bg}, image.Point{}, draw.Src)
-			switch rs[i] {
-			case '▀':
-				draw.Draw(img, image.Rect(cell.Min.X, cell.Min.Y, cell.Max.X, cell.Min.Y+ch/2), &image.Uniform{fg}, image.Point{}, draw.Src)
-			case ' ':
+			fill := func(r image.Rectangle) { draw.Draw(img, r, &image.Uniform{fg}, image.Point{}, draw.Src) }
+			switch r := rs[i]; {
+			case r == '▀':
+				fill(image.Rect(cell.Min.X, cell.Min.Y, cell.Max.X, cell.Min.Y+ch/2))
+			case r >= '▁' && r <= '█':
+				// the eighth blocks fill the cell from the bottom
+				h := ch * int(r-'▁'+1) / 8
+				fill(image.Rect(cell.Min.X, cell.Max.Y-h, cell.Max.X, cell.Max.Y))
+			case r >= 0x2800 && r <= 0x28FF:
+				// braille: a dot for each bit, two columns by four rows
+				bits := r - 0x2800
+				for dx := 0; dx < 2; dx++ {
+					for dy := 0; dy < 4; dy++ {
+						if bits&brailleBit[dx][dy] != 0 {
+							x0, y0 := cell.Min.X+dx*cw/2, cell.Min.Y+dy*ch/4
+							fill(image.Rect(x0+1, y0+1, x0+cw/2-1, y0+ch/4-1))
+						}
+					}
+				}
+			case r == ' ':
 			default:
 				draw.Draw(img, image.Rect(cell.Min.X+cw/4, cell.Min.Y+ch/4, cell.Max.X-cw/4, cell.Max.Y-ch/4), &image.Uniform{fg}, image.Point{}, draw.Src)
 			}
@@ -171,5 +189,39 @@ func writePNGFile(t *testing.T, path string, img image.Image) {
 	defer f.Close()
 	if err := png.Encode(f, img); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestRenderVisualizer writes PNGs of the mini player with each visualizer style
+// when MUSAIK_SNAPSHOT_DIR is set.
+func TestRenderVisualizer(t *testing.T) {
+	dir := os.Getenv("MUSAIK_SNAPSHOT_DIR")
+	if dir == "" {
+		t.Skip("MUSAIK_SNAPSHOT_DIR not set")
+	}
+	// A believable spectrum: strong bass falling off, with a few peaks.
+	frame := make([]uint8, core.VizBands)
+	for i := range frame {
+		v := 240 - float64(i)*2.2
+		v += 40 * math.Sin(float64(i)*0.5)
+		frame[i] = uint8(math.Max(10, math.Min(255, v)))
+	}
+	cover := testCover()
+	for _, style := range []string{"bars", "mirror", "wave"} {
+		for _, sz := range [][2]int{{100, 34}, {100, 16}} {
+			tu, _ := newTestTUI(t, sz[0], sz[1])
+			for _, s := range tu.eng.Store.Songs {
+				tu.art[core.CoverKey(s)] = &artEntry{img: cover, colors: core.PaletteFromImage(cover)}
+			}
+			tu.viz.src, tu.viz.style = &fakeViz{frame: frame}, style
+			tu.eng.PlaySongByID("id0")
+			tu.press("M")
+			for i := 0; i < 14; i++ {
+				tu.updateViz()
+			}
+			tu.dirty = true
+			writePNGFile(t, filepath.Join(dir, fmt.Sprintf("viz-%s-%dx%d.png", style, sz[0], sz[1])),
+				ansiToImage(tu.View().Content, 8, 16, color.RGBA{R: 12, G: 12, B: 14, A: 255}))
+		}
 	}
 }

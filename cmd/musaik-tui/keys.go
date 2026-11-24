@@ -139,7 +139,7 @@ func (t *tui) globalKey(s string) bool {
 	case "b":
 		t.toggleSidebar()
 	case "M":
-		t.mini = true
+		t.setMini(true)
 	case ",":
 		t.openSettings()
 	case "tab":

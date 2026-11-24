@@ -76,7 +76,7 @@ Musaik es un reproductor de música local escrito en Go. Tiene tres caras que co
 - Go 1.27+
 - Mygo CLI (se usa con `go tool mygo`)
 - `ffplay` y `ffprobe`
-- Para la versión de terminal: una terminal con color de 24 bits (y kitty ≥ 0.28, Ghostty o Rex para las carátulas a resolución completa)
+- Para la versión de terminal: una terminal con color de 24 bits (y kitty ≥ 0.28, Ghostty o Rex para las carátulas a resolución completa); `ffmpeg` (el mismo paquete que `ffplay`) para el visualizador
 - Para la extensión: Node.js y npm
 
 Orden de resolución para `ffplay/ffprobe`:
@@ -141,6 +141,7 @@ go build -o dist/musaik-tui ./cmd/musaik-tui
 - **Carátulas a resolución completa** en kitty, Ghostty y Rex (protocolo gráfico de Kitty con *Unicode placeholders*); en cualquier otra terminal, en medio bloque.
 - **20 temas** (`T`): Dracula, Catppuccin (Mocha, Macchiato, Frappé, Latte), Tokyo Night (Night, Storm, Day), Rosé Pine (con Moon y Dawn), Gruvbox, Nord, Solarized, One Dark, Kanagawa y los dos de Sonora (la paleta de la app de escritorio), más la opción «Automático», que sigue el fondo de la terminal.
 - **Mini reproductor** (`M`): tarjeta compacta con los colores de la carátula.
+- **Visualizador de audio** en el mini (`v`): espectro real con barras, espejo u onda en braille, sincronizado con la posición de reproducción. Necesita `ffmpeg`; solo corre con el mini abierto.
 - **Letras** (`L`): sincronizadas con LRCLIB, `.lrc` locales o etiqueta incrustada; la línea actual sigue a la canción, y se puede desplazar y hacer clic para saltar.
 - **Ligera**: ~0,4 % de un núcleo en reposo con 3600 canciones, y ~1 % mientras suena (sin contar `ffplay`).
 - No porta lo que es de la ventana nativa: teclas multimedia y Now Playing de macOS, y el mini reproductor flotante.

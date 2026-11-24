@@ -82,6 +82,38 @@ ese archivo con las claves que conoce y borraría una desconocida. La app de esc
   Sin tiempos se muestra el texto, marcado «sin sincronizar».
 - Mientras la letra está abierta, las teclas de las listas (`enter`, `a`, `f`, `N`…) no hacen nada, porque la lista no se ve.
 
+## Visualizador
+
+El mini reproductor (`M`) puede mostrar un espectro del audio en tiempo real, con los colores de la carátula.
+`v` cambia de estilo (también «Visualizador: cambiar estilo» en la paleta de comandos y Ajustes → Apariencia):
+
+| Estilo | Qué dibuja |
+|---|---|
+| Barras | barras que crecen desde abajo, en octavos de celda, con degradado de la paleta |
+| Espejo | las barras crecen hacia arriba y hacia abajo desde una línea central |
+| Onda | una curva en braille (dos columnas por cuatro filas de puntos por celda) que oscila alrededor del centro |
+| Apagado | sin visualizador: no corre nada de lo que sigue |
+
+La elección se guarda en `tui.json`.
+
+**Cómo funciona.** `ffplay` reproduce sin dejar acceso al audio, así que Musaik decodifica el mismo archivo aparte
+con `ffmpeg` (mono, 22 kHz), calcula una FFT de 2048 puntos y guarda 64 bandas logarítmicas (de 50 Hz a 10,5 kHz)
+por cada treintavo de segundo: unos 2 KB por segundo de audio, solo de la canción que suena. El dibujo busca el
+cuadro por la **posición real de reproducción**, así que respeta pausas y saltos (si te mueves fuera de lo analizado,
+el análisis se reinicia ahí) y no depende de cómo toque `ffplay`. Se compensan 120 ms por lo que tarda en sonar.
+Las barras suben rápido y bajan despacio, y el espectro se inclina 3 dB por octava hacia los agudos para que el lado
+derecho no esté siempre plano.
+
+**Lo que cuesta.** Nada, salvo con el mini abierto, un estilo distinto de «Apagado» y una canción sonando: fuera de eso no
+existe el proceso `ffmpeg` ni el reloj rápido. Con todo activo, el análisis corre como mucho 6 veces más rápido que
+la reproducción y el dibujo va a 15 fotogramas por segundo. En mis medidas (un pty simulado, 100×36) la TUI pasó de
+~0,4 % a ~3 % de un núcleo, más ~1,5 % de `ffmpeg` y ~2,5 % del análisis mientras dura (unos 40 s por una canción de
+4 minutos). Lo que más pesa no es dibujar (0,3 ms por fotograma) sino escribir al terminal, así que depende de cuán
+rápido lo lea el tuyo. Si te importa, `v` hasta «Apagado».
+
+Necesita `ffmpeg`, que se busca igual que `ffplay` (`PATH`, `MUSAIK_FFMPEG_DIR`, junto al ejecutable). Sin él, Ajustes
+lo avisa y el mini sigue como antes.
+
 ## Arquitectura
 
 ```
@@ -121,6 +153,7 @@ vuelve a su goroutine con `Engine.Post`, así que no hay locks ni carreras (`go 
 | Barra lateral ocultable | ✓ `⌘B` | ✓ `b` |
 | Reproductor adaptable al tamaño | ✓ | ✓ (3 niveles + modo compacto) |
 | Mini reproductor | ventana flotante | pantalla compacta con los colores de la carátula (`M`, `-mini`) |
+| Visualizador de espectro en el mini | — | ✓ solo TUI (`v`): barras, espejo u onda |
 | Tema claro/oscuro del sistema | ✓ | ✓ (sigue el fondo de la terminal) |
 | Selector de temas (Dracula, Catppuccin, Tokyo Night, Rosé Pine…) | — | ✓ solo TUI (`T`) |
 | Letras sincronizadas (etiqueta, `.lrc`, LRCLIB) y guardarlas en el archivo | ✓ `⌘L` | ✓ (`L`, `S`) |
@@ -174,6 +207,7 @@ vuelve a su goroutine con `Engine.Post`, así que no hay locks ni carreras (`go 
 | `,` | ajustes (`[` `]` o `←` `→` cambian de pestaña) |
 | `b` | barra lateral |
 | `M` | mini reproductor |
+| `v` | visualizador del mini (barras, espejo, onda, apagado) |
 | `T` | elegir tema |
 | `ctrl+r` | reindexar |
 | `I` | iPod: detectar / sincronizar |
@@ -215,6 +249,8 @@ Para medir tú mismo:
 ```bash
 # coste por frame de cada vista (con una biblioteca real: HOME apunta a una copia)
 MUSAIK_BENCH_HOME=/ruta/a/un/home go test ./cmd/musaik-tui -run '^$' -bench . -benchmem
+# CPU de toda una sesión, escrito al salir con normalidad (q)
+MUSAIK_CPU_PROFILE=/tmp/cpu.prof ./dist/musaik-tui     # luego: go tool pprof dist/musaik-tui /tmp/cpu.prof
 # heap en vivo de una sesión: kill -USR1 <pid> escribe el perfil
 MUSAIK_HEAP_PROFILE=/tmp/heap.prof ./dist/musaik-tui   # luego: go tool pprof -sample_index=inuse_space dist/musaik-tui /tmp/heap.prof
 ```

@@ -457,6 +457,11 @@ func probeDuration(path string) time.Duration {
 	return time.Duration(secs * float64(time.Second))
 }
 
+// LookPath finds a helper program such as ffmpeg the way the player finds
+// ffplay: in PATH, then in MUSAIK_FFMPEG_DIR and the places a packaged app keeps
+// its binaries.
+func LookPath(name string) (string, error) { return findExecutable(name) }
+
 func findExecutable(name string) (string, error) {
 	if path, err := exec.LookPath(name); err == nil {
 		return path, nil
